@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Генерация презентации</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f1ea;
+        --panel: #ffffff;
+        --ink: #1f1f1f;
+        --muted: #5b5b5b;
+        --accent: #2f6fed;
+        --accent-2: #0f3eaa;
+        --border: #d7d2c9;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, #fff8e8 0%, #f1ede4 55%, #ebe6dc 100%);
+        font-family: "Georgia", "Times New Roman", serif;
+        color: var(--ink);
+      }
+
+      main {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+      }
+
+      header {
+        margin-bottom: 32px;
+      }
+
+      h1 {
+        font-size: 40px;
+        margin: 0 0 12px;
+        letter-spacing: -0.02em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 28px;
+        box-shadow: 0 20px 60px rgba(20, 15, 10, 0.08);
+      }
+
+      form {
+        display: grid;
+        gap: 18px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      label {
+        display: block;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      input,
+      select {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        font-size: 16px;
+        font-family: "Arial", sans-serif;
+      }
+
+      button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 999px;
+        padding: 14px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s ease, transform 0.2s ease;
+      }
+
+      button:hover {
+        background: var(--accent-2);
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        background: #9fb7f0;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .tasks {
+        margin-top: 28px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .task-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 14px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: #fffdf9;
+        align-items: center;
+      }
+
+      .task-meta {
+        display: grid;
+        gap: 6px;
+      }
+
+      .task-title {
+        font-weight: 600;
+        font-size: 16px;
+      }
+
+      .task-status {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .task-progress {
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #efe9dc;
+        overflow: hidden;
+      }
+
+      .task-progress span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #2f6fed, #44b3ff);
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+
+      .task-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .task-links a {
+        font-size: 13px;
+        color: var(--accent-2);
+        text-decoration: none;
+        border: 1px solid #d5def5;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #f3f7ff;
+      }
+
+      .task-actions {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .add-task {
+        margin-top: 16px;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+
+      .add-task button {
+        width: 100%;
+        max-width: 240px;
+      }
+
+      .error {
+        margin-top: 12px;
+        color: #b00020;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Сформируйте новую презентацию</h1>
+        <p>Заполните параметры, чтобы запустить генерацию и следить за прогрессом.</p>
+      </header>
+
+      <section class="panel">
+        <form id="presentation-form">
+          <div>
+            <label for="topic">Тема</label>
+            <input id="topic" name="topic" type="text" required placeholder="Например: Энергия ветра" />
+          </div>
+          <div>
+            <label for="author">Автор</label>
+            <input id="author" name="author" type="text" placeholder="Необязательно" />
+          </div>
+          <div>
+            <label for="language">Язык</label>
+            <select id="language" name="language">
+              <option value="kz">kz — казахский</option>
+            </select>
+          </div>
+          <div>
+            <label for="slides_amount">Кол-во слайдов</label>
+            <select id="slides_amount" name="slides_amount">
+              <option value="10">10</option>
+              <option value="30">30</option>
+            </select>
+          </div>
+          <div>
+            <label for="audience">Аудитория</label>
+            <select id="audience" name="audience">
+              <option value="Средняя школа">Средняя школа</option>
+            </select>
+          </div>
+          <button type="submit" id="submit-btn">Запустить генерацию</button>
+        </form>
+        <div class="error" id="error"></div>
+        <div class="tasks" id="tasks"></div>
+        <div class="add-task hidden" id="add-task">
+          <button type="button" id="add-task-btn">+ Новое задание</button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById("presentation-form");
+      const submitBtn = document.getElementById("submit-btn");
+      const tasksEl = document.getElementById("tasks");
+      const addTaskWrap = document.getElementById("add-task");
+      const addTaskBtn = document.getElementById("add-task-btn");
+      const errorEl = document.getElementById("error");
+
+      const sockets = new Map();
+
+      function formatTitle(payload) {
+        return `${payload.topic} • ${payload.language} • ${payload.slides_amount} слайдов`;
+      }
+
+      function createTaskRow(payload) {
+        const row = document.createElement("div");
+        row.className = "task-row";
+        row.dataset.presentationId = payload.id;
+
+        const meta = document.createElement("div");
+        meta.className = "task-meta";
+
+        const title = document.createElement("div");
+        title.className = "task-title";
+        title.textContent = formatTitle(payload);
+
+        const status = document.createElement("div");
+        status.className = "task-status";
+        status.textContent = "В очереди";
+
+        const progress = document.createElement("div");
+        progress.className = "task-progress";
+        const progressFill = document.createElement("span");
+        progress.appendChild(progressFill);
+
+        const links = document.createElement("div");
+        links.className = "task-links";
+
+        meta.append(title, status, progress, links);
+
+        const actions = document.createElement("div");
+        actions.className = "task-actions";
+        actions.textContent = "Генерация…";
+
+        row.append(meta, actions);
+
+        tasksEl.prepend(row);
+
+        return { row, status, progressFill, links, actions };
+      }
+
+      function updateLinks(linksEl, files, fileUrls) {
+        linksEl.innerHTML = "";
+        if (!files || !fileUrls || files.length !== fileUrls.length) {
+          return;
+        }
+        const seen = new Set();
+        files.forEach((file, index) => {
+          const url = fileUrls[index];
+          if (!url || seen.has(url)) {
+            return;
+          }
+          seen.add(url);
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          const filename = file.split("/").slice(-1)[0] || `Файл ${index + 1}`;
+          link.textContent = filename;
+          linksEl.appendChild(link);
+        });
+      }
+
+      function connectSocket(presentationId, ui) {
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const socket = new WebSocket(
+          `${protocol}://${window.location.host}/ws/presentations/${presentationId}/`
+        );
+
+        socket.onmessage = (event) => {
+          const payload = JSON.parse(event.data || "{}");
+          if (payload.error) {
+            errorEl.textContent = payload.error;
+            ui.status.textContent = "Ошибка";
+            ui.actions.textContent = "Сбой";
+            return;
+          }
+          const percent = payload.percent ?? 0;
+          const stage = payload.stage ?? "В процессе";
+          ui.progressFill.style.width = `${percent}%`;
+          ui.status.textContent = `${stage} (${percent}%)`;
+          ui.actions.textContent = "Выполняется";
+          if (payload.files || payload.file_urls) {
+            updateLinks(ui.links, payload.files, payload.file_urls);
+          }
+          if (stage === "completed" || stage === "done") {
+            ui.actions.textContent = "Готово";
+          }
+        };
+
+        socket.onclose = () => {
+          submitBtn.disabled = false;
+        };
+
+        sockets.set(presentationId, socket);
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        submitBtn.disabled = true;
+        errorEl.textContent = "";
+
+        const payload = {
+          topic: form.topic.value.trim(),
+          author: form.author.value.trim() || null,
+          language: form.language.value,
+          slides_amount: parseInt(form.slides_amount.value, 10),
+          audience: form.audience.value,
+        };
+
+        try {
+          const response = await fetch("/api/presentations/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Ошибка при создании презентации");
+          }
+
+          const result = await response.json();
+          const ui = createTaskRow({
+            ...payload,
+            id: result.id,
+          });
+          connectSocket(result.id, ui);
+          form.classList.add("hidden");
+          addTaskWrap.classList.remove("hidden");
+        } catch (err) {
+          submitBtn.disabled = false;
+          errorEl.textContent = err.message || "Не удалось запустить генерацию";
+        }
+      });
+
+      addTaskBtn.addEventListener("click", () => {
+        form.reset();
+        form.classList.remove("hidden");
+        addTaskWrap.classList.add("hidden");
+        submitBtn.disabled = false;
+      });
+    </script>
+  </body>
+</html>

@@ -5,13 +5,26 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from django.http import HttpRequest, JsonResponse
+import os
+
+from django.http import FileResponse, Http404, HttpRequest, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
 from .dto import CreatePresentationCommandDto
+from .models import Presentation
 from .services import PresentationService
+from .tasks import generate_presentation_task
+
+
+class PresentationFormView(View):
+    """Render the presentation generation form."""
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any):
+        return render(request, "presentations_app/presentation_form.html")
 
 
 class PresentationCreateView(View):
@@ -68,7 +81,8 @@ class PresentationCreateView(View):
             status=status,
         )
 
-        presentation = self.service.create_presentation(command)
+        presentation = self.service.create_presentation(command.with_status("queued"))
+        generate_presentation_task.delay(str(presentation.id))
         return JsonResponse(
             {
                 "id": str(presentation.id),
@@ -79,6 +93,55 @@ class PresentationCreateView(View):
                 "author": presentation.author,
                 "status": presentation.status,
                 "files": presentation.files,
+                "download_url": reverse(
+                    "presentation-download",
+                    kwargs={"presentation_id": presentation.id},
+                ),
             },
             status=201,
         )
+
+
+class PresentationDownloadView(View):
+    """Download the generated PDF presentation."""
+
+    def get(self, request: HttpRequest, presentation_id: str, *args: Any, **kwargs: Any):
+        presentation = get_object_or_404(Presentation, id=presentation_id)
+        pdf_path = next(
+            (path for path in presentation.files if path.lower().endswith(".pdf")),
+            None,
+        )
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise Http404("PDF file not found")
+
+        response = FileResponse(open(pdf_path, "rb"), as_attachment=True)
+        response["Content-Disposition"] = (
+            f'attachment; filename="{os.path.basename(pdf_path)}"'
+        )
+        return response
+
+
+class PresentationFileDownloadView(View):
+    """Download any generated file by index."""
+
+    def get(
+        self,
+        request: HttpRequest,
+        presentation_id: str,
+        file_index: int,
+        *args: Any,
+        **kwargs: Any,
+    ):
+        presentation = get_object_or_404(Presentation, id=presentation_id)
+        try:
+            file_path = presentation.files[int(file_index)]
+        except (IndexError, ValueError, TypeError):
+            raise Http404("File not found")
+        if not file_path or not os.path.exists(file_path):
+            raise Http404("File not found")
+
+        response = FileResponse(open(file_path, "rb"), as_attachment=True)
+        response["Content-Disposition"] = (
+            f'attachment; filename="{os.path.basename(file_path)}"'
+        )
+        return response

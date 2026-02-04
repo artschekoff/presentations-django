@@ -6,11 +6,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-try:
-    from mongoengine import connect as mongoengine_connect
-except ImportError:  # pragma: no cover - happens if dependencies aren’t installed yet
-    mongoengine_connect = None
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -45,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",
     "presentations_app.apps.PresentationsAppConfig",
 ]
 
@@ -77,6 +73,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "presentations.wsgi.application"
+ASGI_APPLICATION = "presentations.asgi.application"
 
 default_engine = os.getenv("DJANGO_DB_ENGINE", "django.db.backends.sqlite3")
 database_name = _read_env("DJANGO_DB_NAME")
@@ -131,37 +128,53 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-def _connect_mongoengine() -> None:
-    if mongoengine_connect is None:
-        return
+PRESENTATIONS_ASSETS_DIR = str(
+    BASE_DIR / _read_env("PRESENTATIONS_ASSETS_DIR", "generated_presentations")
+)
 
-    mongo_db = _read_env("MONGO_DB_NAME", "presentations")
-    mongo_alias = _read_env("MONGO_ALIAS", "default")
-    mongo_uri = _read_env("MONGO_URI")
+CHANNEL_REDIS_URL = _read_env("CHANNEL_REDIS_URL", CELERY_BROKER_URL)
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [CHANNEL_REDIS_URL]},
+    }
+}
 
-    kwargs: dict[str, str] = {"db": mongo_db, "alias": mongo_alias}
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    if mongo_uri:
-        kwargs["host"] = mongo_uri
-    else:
-        kwargs["host"] = _read_env("MONGO_HOST", "localhost")
-        port = _read_env("MONGO_PORT")
-        if port:
-            try:
-                kwargs["port"] = int(port)
-            except ValueError:
-                kwargs["port"] = port
-        username = _read_env("MONGO_USER")
-        password = _read_env("MONGO_PASSWORD")
-        if username:
-            kwargs["username"] = username
-        if password:
-            kwargs["password"] = password
-        auth_source = _read_env("MONGO_AUTH_SOURCE")
-        if auth_source:
-            kwargs["authentication_source"] = auth_source
-
-    mongoengine_connect(**kwargs)
-
-
-_connect_mongoengine()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+            "level": "DEBUG",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "standard",
+            "filename": str(LOG_DIR / "app.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "level": "DEBUG",
+        },
+    },
+    "root": {"handlers": ["console", "file"], "level": "DEBUG"},
+    "loggers": {
+        "presentations_app": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "presentations_module": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
+}

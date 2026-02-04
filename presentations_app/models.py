@@ -24,3 +24,23 @@ class Presentation(models.Model):
 
     def __str__(self) -> str:
         return f"{self.topic} ({self.language})"
+
+
+class PresentationLog(models.Model):
+    """Structured logs for presentation generation."""
+
+    presentation = models.ForeignKey(
+        Presentation, on_delete=models.CASCADE, related_name="logs"
+    )
+    kind = models.CharField(max_length=32)
+    stage = models.CharField(max_length=64, blank=True, null=True)
+    percent = models.PositiveIntegerField(blank=True, null=True)
+    message = models.TextField(blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at",)
+
+    def __str__(self) -> str:
+        return f"{self.presentation_id} {self.kind} {self.stage or ''}".strip()
