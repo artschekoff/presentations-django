@@ -66,3 +66,6 @@ build-amd64:
 
 build-amd64-push:
 	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --push .
+
+deploy:
+	wget -qO- https://docker.nftwitting.com/api/deploy/compose/eB6AM2XrQE5Gv_H501-xM
