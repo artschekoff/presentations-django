@@ -103,6 +103,7 @@ def generate_presentation_task(self, presentation_id: str) -> None:
             apw,
             logger=sokratic_logger,
             assets_dir=settings.PRESENTATIONS_ASSETS_DIR,
+            generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
         )
         if not hasattr(source, "browser"):
             source.browser = None

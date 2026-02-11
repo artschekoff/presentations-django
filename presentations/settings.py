@@ -29,6 +29,16 @@ def _read_env(name: str, default: str | None = None) -> str | None:
     return default
 
 
+def _int_env(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 SECRET_KEY = _read_env("DJANGO_SECRET_KEY", "django-insecure-REPLACE_WITH_YOUR_SECRET_KEY")
 DEBUG = _bool_env("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = _list_env("DJANGO_ALLOWED_HOSTS")
@@ -130,6 +140,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 PRESENTATIONS_ASSETS_DIR = str(
     BASE_DIR / _read_env("PRESENTATIONS_ASSETS_DIR", "generated_presentations")
+)
+PRESENTATIONS_GENERATION_TIMEOUT_MS = _int_env(
+    "PRESENTATIONS_GENERATION_TIMEOUT_MS",
+    1200000,
 )
 
 CHANNEL_REDIS_URL = _read_env("CHANNEL_REDIS_URL", CELERY_BROKER_URL)
