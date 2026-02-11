@@ -14,11 +14,14 @@ RUN apt-get update \
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r /app/requirements.txt \
-    && playwright install --with-deps chromium
+    && pip install --no-cache-dir -r /app/requirements.txt
+
+RUN playwright install-deps chromium
+RUN playwright install chromium
 
 COPY . /app
+RUN chmod +x /app/docker/start-web.sh
 
 EXPOSE 8000
 
-CMD ["supervisord", "-c", "/app/supervisord.conf"]
+CMD ["/app/docker/start-web.sh"]
