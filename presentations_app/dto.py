@@ -15,8 +15,12 @@ class CreatePresentationCommandDto:
     topic: str
     language: str
     slides_amount: int
-    audience: str
+    grade: int
+    subject: str
     author: str | None = None
+    task_id: str | None = None
+    book_id: int | None = None
+    template: int | None = None
     status: str = "pending"
     files: list[str] = field(default_factory=list)
 
@@ -26,8 +30,12 @@ class CreatePresentationCommandDto:
             topic=self.topic,
             language=self.language,
             slides_amount=self.slides_amount,
-            audience=self.audience,
+            grade=self.grade,
+            subject=self.subject,
             author=self.author,
+            task_id=self.task_id,
+            book_id=self.book_id,
+            template=self.template,
             status=status,
             files=list(self.files),
         )

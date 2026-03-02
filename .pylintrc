@@ -1,0 +1,21 @@
+[MAIN]
+load-plugins=pylint_django
+django-settings-module=presentations.settings
+ignore-paths=^presentations_app/migrations/
+
+[FORMAT]
+max-line-length=120
+
+[MESSAGES CONTROL]
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-few-public-methods,
+    broad-exception-caught
+
+[DESIGN]
+max-args=8
+max-statements=65
+max-returns=10
+max-attributes=9

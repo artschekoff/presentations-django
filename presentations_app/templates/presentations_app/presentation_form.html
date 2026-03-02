@@ -55,6 +55,7 @@
         border-radius: 16px;
         padding: 28px;
         box-shadow: 0 20px 60px rgba(20, 15, 10, 0.08);
+        margin-bottom: 16px;
       }
 
       form {
@@ -75,7 +76,8 @@
         margin-bottom: 6px;
       }
 
-      input,
+      input[type="text"],
+      input[type="file"],
       select {
         width: 100%;
         padding: 12px 14px;
@@ -83,6 +85,12 @@
         border: 1px solid var(--border);
         font-size: 16px;
         font-family: "Arial", sans-serif;
+      }
+
+      input[type="file"] {
+        padding: 10px 14px;
+        background: #fafaf8;
+        cursor: pointer;
       }
 
       button {
@@ -106,6 +114,119 @@
         background: #9fb7f0;
         cursor: not-allowed;
         transform: none;
+      }
+
+      .btn-outline {
+        background: #fff;
+        color: var(--accent);
+        border: 2px solid var(--accent);
+      }
+
+      .btn-outline:hover {
+        background: #f0f5ff;
+        color: var(--accent-2);
+        border-color: var(--accent-2);
+      }
+
+      .btn-outline:disabled {
+        background: #fff;
+        color: #9fb7f0;
+        border-color: #9fb7f0;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .mode-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 8px;
+      }
+
+      .mode-btn {
+        background: #f8f5ef;
+        border: 2px solid var(--border);
+        border-radius: 16px;
+        padding: 32px 20px;
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--ink);
+        text-align: center;
+        line-height: 1.4;
+        transition: border-color 0.2s, background 0.2s, transform 0.2s;
+      }
+
+      .mode-btn:hover {
+        background: var(--panel);
+        border-color: var(--accent);
+        color: var(--accent);
+        transform: translateY(-2px);
+      }
+
+      .mode-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--muted);
+        margin-top: 6px;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .csv-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .feedback-success {
+        margin-top: 16px;
+        padding: 12px 16px;
+        border-radius: 10px;
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+        color: #166534;
+        font-size: 15px;
+        font-family: "Arial", sans-serif;
+      }
+
+      .feedback-error-header {
+        margin-top: 16px;
+        margin-bottom: 8px;
+        font-size: 14px;
+        color: #b00020;
+        font-weight: 600;
+        font-family: "Arial", sans-serif;
+      }
+
+      .error-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        font-family: "Arial", sans-serif;
+      }
+
+      .error-table th {
+        text-align: left;
+        padding: 6px 10px;
+        background: #fff5f5;
+        border-bottom: 1px solid #fecaca;
+        color: #b00020;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+      }
+
+      .error-table td {
+        padding: 6px 10px;
+        border-bottom: 1px solid #fee2e2;
+        color: #7f1d1d;
+        vertical-align: top;
+      }
+
+      .error-table tr:last-child td {
+        border-bottom: none;
       }
 
       .tasks {
@@ -177,6 +298,38 @@
         color: var(--muted);
       }
 
+      .task-row--failed {
+        border-color: #fca5a5;
+        background: #fff5f5;
+      }
+
+      .task-row--failed .task-status {
+        color: #b91c1c;
+      }
+
+      .btn-restart {
+        background: #dc2626;
+        color: #fff;
+        border: none;
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .btn-restart:hover {
+        background: #b91c1c;
+        transform: translateY(-1px);
+      }
+
+      .btn-restart:disabled {
+        background: #fca5a5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
       .add-task {
         margin-top: 16px;
         width: 100%;
@@ -193,6 +346,7 @@
         margin-top: 12px;
         color: #b00020;
         font-size: 14px;
+        font-family: "Arial", sans-serif;
       }
     </style>
   </head>
@@ -203,54 +357,111 @@
         <p>Заполните параметры, чтобы запустить генерацию и следить за прогрессом.</p>
       </header>
 
-      <section class="panel">
-        <form id="presentation-form">
-          <div>
-            <label for="topic">Тема</label>
-            <input id="topic" name="topic" type="text" required placeholder="Например: Энергия ветра" />
-          </div>
-          <div>
-            <label for="author">Автор</label>
-            <input id="author" name="author" type="text" placeholder="Необязательно" />
-          </div>
-          <div>
-            <label for="language">Язык</label>
-            <select id="language" name="language">
-              <option value="kz">kz — казахский</option>
-            </select>
-          </div>
-          <div>
-            <label for="slides_amount">Кол-во слайдов</label>
-            <select id="slides_amount" name="slides_amount">
-              <option value="10">10</option>
-              <option value="30">30</option>
-            </select>
-          </div>
-          <div>
-            <label for="audience">Аудитория</label>
-            <select id="audience" name="audience">
-              <option value="Средняя школа">Средняя школа</option>
-            </select>
-          </div>
-          <button type="submit" id="submit-btn">Запустить генерацию</button>
-        </form>
-        <div class="error" id="error"></div>
-        <div class="tasks" id="tasks"></div>
+      <!-- Mode selection -->
+      <section class="panel" id="mode-selection">
+        <p style="margin-bottom: 16px; font-family: Arial, sans-serif; font-size: 16px;">Выберите режим работы:</p>
+        <div class="mode-grid">
+          <button class="mode-btn" id="btn-manual">
+            Ручной режим
+            <span class="mode-label">Одна задача вручную</span>
+          </button>
+          <button class="mode-btn" id="btn-csv">
+            Импорт из CSV
+            <span class="mode-label">Массовая загрузка из файла</span>
+          </button>
+        </div>
+        <div style="margin-top: 16px; text-align: center;">
+          <button type="button" id="btn-load-active" class="btn-outline" style="font-size: 14px; padding: 10px 20px;">
+            Загрузить активные задачи
+          </button>
+        </div>
+      </section>
+
+      <!-- Manual mode -->
+      <section id="manual-section" class="hidden">
+        <div class="panel">
+          <form id="presentation-form">
+            <div>
+              <label for="topic">Тема</label>
+              <input id="topic" name="topic" type="text" required placeholder="Например: Энергия ветра" />
+            </div>
+            <div>
+              <label for="author">Автор</label>
+              <input id="author" name="author" type="text" placeholder="Необязательно" />
+            </div>
+            <div>
+              <label for="language">Язык</label>
+              <select id="language" name="language">
+                <option value="kz">kz — казахский</option>
+              </select>
+            </div>
+            <div>
+              <label for="slides_amount">Кол-во слайдов</label>
+              <select id="slides_amount" name="slides_amount">
+                <option value="10">10</option>
+                <option value="30">30</option>
+              </select>
+            </div>
+            <div>
+            <label for="csv-file">CSV-файл (разделитель: ; <span style="margin-left: 8px;">кодировка: UTF-8</span>)</label>
+              <select id="grade" name="grade">
+                <option value="1">1 класс</option>
+                <option value="2">2 класс</option>
+                <option value="3">3 класс</option>
+                <option value="4">4 класс</option>
+                <option value="5">5 класс</option>
+                <option value="6">6 класс</option>
+                <option value="7">7 класс</option>
+                <option value="8">8 класс</option>
+                <option value="9">9 класс</option>
+                <option value="10">10 класс</option>
+                <option value="11">11 класс</option>
+              </select>
+            </div>
+            <div>
+              <label for="subject">Предмет</label>
+              <input id="subject" name="subject" type="text" required placeholder="Например: Математика" />
+            </div>
+            <button type="submit" id="submit-btn">Запустить генерацию</button>
+          </form>
+          <div class="error" id="manual-error"></div>
+        </div>
         <div class="add-task hidden" id="add-task">
           <button type="button" id="add-task-btn">+ Новое задание</button>
         </div>
       </section>
+
+      <!-- CSV mode -->
+      <section class="panel hidden" id="csv-section">
+        <form id="csv-form">
+          <div>
+            <label for="csv-file">CSV-файл (разделитель: ; &nbsp;&nbsp; кодировка: UTF-8)</label>
+            <input type="file" id="csv-file" accept=".csv" />
+          </div>
+          <div>
+            <label for="csv-slides-amount">Кол-во слайдов</label>
+            <select id="csv-slides-amount">
+              <option value="10">10</option>
+              <option value="30">30</option>
+            </select>
+          </div>
+          <div class="csv-actions">
+            <button type="button" id="btn-verify">Проверить</button>
+            <button type="button" id="btn-queue" class="btn-outline" disabled>Добавить в очередь</button>
+          </div>
+        </form>
+        <div id="csv-feedback"></div>
+        <div class="error" id="queue-error"></div>
+      </section>
+
+      <!-- Shared task list -->
+      <div class="tasks" id="tasks"></div>
     </main>
 
     <script>
-      const form = document.getElementById("presentation-form");
-      const submitBtn = document.getElementById("submit-btn");
-      const tasksEl = document.getElementById("tasks");
-      const addTaskWrap = document.getElementById("add-task");
-      const addTaskBtn = document.getElementById("add-task-btn");
-      const errorEl = document.getElementById("error");
-
+      // --- Shared ---
       const sockets = new Map();
+      const tasksEl = document.getElementById("tasks");
 
       function formatTitle(payload) {
         return `${payload.topic} • ${payload.language} • ${payload.slides_amount} слайдов`;
@@ -287,7 +498,6 @@
         actions.textContent = "Генерация…";
 
         row.append(meta, actions);
-
         tasksEl.prepend(row);
 
         return { row, status, progressFill, links, actions };
@@ -295,15 +505,11 @@
 
       function updateLinks(linksEl, files, fileUrls) {
         linksEl.innerHTML = "";
-        if (!files || !fileUrls || files.length !== fileUrls.length) {
-          return;
-        }
+        if (!files || !fileUrls || files.length !== fileUrls.length) return;
         const seen = new Set();
         files.forEach((file, index) => {
           const url = fileUrls[index];
-          if (!url || seen.has(url)) {
-            return;
-          }
+          if (!url || seen.has(url)) return;
           seen.add(url);
           const link = document.createElement("a");
           link.href = url;
@@ -315,6 +521,67 @@
         });
       }
 
+      function createFailedTaskRow(task) {
+        const row = document.createElement("div");
+        row.className = "task-row task-row--failed";
+        row.dataset.presentationId = task.id;
+
+        const meta = document.createElement("div");
+        meta.className = "task-meta";
+
+        const title = document.createElement("div");
+        title.className = "task-title";
+        title.textContent = formatTitle(task);
+
+        const status = document.createElement("div");
+        status.className = "task-status";
+        const retryLabel = task.retry_count != null ? ` (${task.retry_count}/3 попыток)` : "";
+        status.textContent = `Ошибка генерации${retryLabel}`;
+
+        const progress = document.createElement("div");
+        progress.className = "task-progress";
+        const progressFill = document.createElement("span");
+        progressFill.style.width = "0%";
+        progress.appendChild(progressFill);
+
+        const links = document.createElement("div");
+        links.className = "task-links";
+
+        meta.append(title, status, progress, links);
+
+        const restartBtn = document.createElement("button");
+        restartBtn.className = "btn-restart";
+        restartBtn.textContent = "↺ Перезапустить";
+        restartBtn.addEventListener("click", async () => {
+          restartBtn.disabled = true;
+          restartBtn.textContent = "Запускаю…";
+          try {
+            const resp = await fetch(`/api/presentations/${task.id}/restart/`, { method: "POST" });
+            if (!resp.ok) throw new Error(await resp.text());
+            // Same ID — convert row in place: remove failed styling, add progress UI
+            row.classList.remove("task-row--failed");
+            status.textContent = "В очереди";
+            status.style.color = "";
+            links.innerHTML = "";
+            restartBtn.remove();
+            const actionsEl = document.createElement("div");
+            actionsEl.className = "task-actions";
+            actionsEl.textContent = "Генерация…";
+            row.appendChild(actionsEl);
+            sockets.delete(task.id);
+            connectSocket(task.id, { row, status, progressFill, links, actions: actionsEl });
+          } catch (err) {
+            restartBtn.disabled = false;
+            restartBtn.textContent = "↺ Перезапустить";
+            alert(`Ошибка перезапуска: ${err.message}`);
+          }
+        });
+
+        row.append(meta, restartBtn);
+        tasksEl.prepend(row);
+        sockets.set(task.id, null);
+      }
+
       function connectSocket(presentationId, ui) {
         const protocol = window.location.protocol === "https:" ? "wss" : "ws";
         const socket = new WebSocket(
@@ -323,14 +590,29 @@
 
         socket.onmessage = (event) => {
           const payload = JSON.parse(event.data || "{}");
-          if (payload.error) {
-            errorEl.textContent = payload.error;
-            ui.status.textContent = "Ошибка";
-            ui.actions.textContent = "Сбой";
-            return;
-          }
           const percent = payload.percent ?? 0;
           const stage = payload.stage ?? "В процессе";
+
+          if (stage === "retrying") {
+            const attempt = payload.retry_count ?? "?";
+            const max = payload.max_retries ?? 3;
+            ui.progressFill.style.width = "0%";
+            ui.status.textContent = `Повтор попытки ${attempt}/${max}…`;
+            ui.actions.textContent = "Повтор";
+            return;
+          }
+
+          if (stage === "failed") {
+            const attempt = payload.retry_count ?? 3;
+            const max = payload.max_retries ?? 3;
+            ui.row.classList.add("task-row--failed");
+            ui.progressFill.style.width = "0%";
+            ui.status.textContent = `Ошибка генерации (${attempt}/${max} попыток)`;
+            ui.actions.textContent = "Провалено";
+            return;
+          }
+
+          ui.row.classList.remove("task-row--failed");
           ui.progressFill.style.width = `${percent}%`;
           ui.status.textContent = `${stage} (${percent}%)`;
           ui.actions.textContent = "Выполняется";
@@ -342,24 +624,78 @@
           }
         };
 
-        socket.onclose = () => {
-          submitBtn.disabled = false;
-        };
-
+        socket.onclose = () => {};
         sockets.set(presentationId, socket);
       }
+
+      // --- Load active tasks ---
+      async function loadActiveTasks() {
+        const btn = document.getElementById("btn-load-active");
+        if (btn) { btn.disabled = true; btn.textContent = "Загружаю…"; }
+        let added = 0;
+        try {
+          const resp = await fetch("/api/presentations/active/?limit=200");
+          if (!resp.ok) {
+            alert(`Ошибка загрузки активных задач: ${resp.status} ${resp.statusText}`);
+            if (btn) { btn.disabled = false; btn.textContent = "Загрузить активные задачи"; }
+            return;
+          }
+          const tasks = await resp.json();
+          tasks.forEach((task) => {
+            if (sockets.has(task.id)) return;
+            if (task.status === "failed") {
+              createFailedTaskRow(task);
+            } else {
+              const ui = createTaskRow(task);
+              connectSocket(task.id, ui);
+            }
+            added++;
+          });
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = added > 0
+              ? `Загружено ${added} задач — обновить`
+              : "Нет новых активных задач";
+          }
+        } catch (err) {
+          alert(`Ошибка загрузки активных задач: ${err.message}`);
+          if (btn) { btn.disabled = false; btn.textContent = "Загрузить активные задачи"; }
+        }
+      }
+
+      document.getElementById("btn-load-active").addEventListener("click", loadActiveTasks);
+      loadActiveTasks();
+
+      // --- Mode selection ---
+      document.getElementById("btn-manual").addEventListener("click", () => {
+        document.getElementById("mode-selection").classList.add("hidden");
+        document.getElementById("manual-section").classList.remove("hidden");
+      });
+
+      document.getElementById("btn-csv").addEventListener("click", () => {
+        document.getElementById("mode-selection").classList.add("hidden");
+        document.getElementById("csv-section").classList.remove("hidden");
+      });
+
+      // --- Manual mode ---
+      const form = document.getElementById("presentation-form");
+      const submitBtn = document.getElementById("submit-btn");
+      const manualError = document.getElementById("manual-error");
+      const addTaskWrap = document.getElementById("add-task");
+      const addTaskBtn = document.getElementById("add-task-btn");
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         submitBtn.disabled = true;
-        errorEl.textContent = "";
+        manualError.textContent = "";
 
         const payload = {
           topic: form.topic.value.trim(),
           author: form.author.value.trim() || null,
           language: form.language.value,
           slides_amount: parseInt(form.slides_amount.value, 10),
-          audience: form.audience.value,
+          grade: parseInt(form.grade.value, 10),
+          subject: form.subject.value.trim(),
         };
 
         try {
@@ -375,16 +711,13 @@
           }
 
           const result = await response.json();
-          const ui = createTaskRow({
-            ...payload,
-            id: result.id,
-          });
+          const ui = createTaskRow({ ...payload, id: result.id });
           connectSocket(result.id, ui);
           form.classList.add("hidden");
           addTaskWrap.classList.remove("hidden");
         } catch (err) {
           submitBtn.disabled = false;
-          errorEl.textContent = err.message || "Не удалось запустить генерацию";
+          manualError.textContent = err.message || "Не удалось запустить генерацию";
         }
       });
 
@@ -393,6 +726,249 @@
         form.classList.remove("hidden");
         addTaskWrap.classList.add("hidden");
         submitBtn.disabled = false;
+      });
+
+      // --- CSV mode ---
+      const LANG_MAP = { "Казахский": "kz", "Русский": "ru" };
+      const VALID_LANGS = Object.keys(LANG_MAP);
+      const EXPECTED_HEADERS = ["task_id", "book_id", "topic_title", "class", "subject", "lang", "template"];
+
+      const csvFile = document.getElementById("csv-file");
+      const csvSlidesAmount = document.getElementById("csv-slides-amount");
+      const btnVerify = document.getElementById("btn-verify");
+      const btnQueue = document.getElementById("btn-queue");
+      const csvFeedback = document.getElementById("csv-feedback");
+      const queueError = document.getElementById("queue-error");
+
+      let validatedRows = [];
+
+      function parseCsv(text) {
+        const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+        if (lines.length < 2) {
+          return {
+            errors: [{ row: "—", field: "—", message: "Файл пуст или содержит только заголовки" }],
+            rows: [],
+          };
+        }
+
+        const headers = lines[0].split(";").map((h) => h.trim().toLowerCase());
+        const missingHeaders = EXPECTED_HEADERS.filter((h) => !headers.includes(h));
+        if (missingHeaders.length > 0) {
+          return {
+            errors: [{ row: 1, field: "заголовки", message: `Отсутствуют колонки: ${missingHeaders.join(", ")}` }],
+            rows: [],
+          };
+        }
+
+        const idx = (name) => headers.indexOf(name);
+        const errors = [];
+        const rows = [];
+        const seenTaskIds = new Set();
+
+        for (let i = 1; i < lines.length; i++) {
+          const rowNum = i + 1;
+          const cells = lines[i].split(";").map((c) => c.trim());
+          const get = (name) => (cells[idx(name)] ?? "").trim();
+
+          const task_id = get("task_id");
+          const book_id_raw = get("book_id");
+          const topic_title = get("topic_title");
+          const class_raw = get("class");
+          const subject = get("subject");
+          const lang = get("lang");
+          const template_raw = get("template");
+
+          let rowValid = true;
+
+          if (!task_id) {
+            errors.push({ row: rowNum, field: "task_id", message: "Не может быть пустым" });
+            rowValid = false;
+          } else if (seenTaskIds.has(task_id)) {
+            errors.push({ row: rowNum, field: "task_id", message: `Дублируется значение "${task_id}"` });
+            rowValid = false;
+          } else {
+            seenTaskIds.add(task_id);
+          }
+
+          let book_id = null;
+          if (!book_id_raw) {
+            errors.push({ row: rowNum, field: "book_id", message: "Не может быть пустым" });
+            rowValid = false;
+          } else {
+            book_id = parseInt(book_id_raw, 10);
+            if (isNaN(book_id)) {
+              errors.push({ row: rowNum, field: "book_id", message: "Должно быть целым числом" });
+              rowValid = false;
+            }
+          }
+
+          if (!topic_title) {
+            errors.push({ row: rowNum, field: "topic_title", message: "Не может быть пустым" });
+            rowValid = false;
+          }
+
+          let grade = null;
+          if (!class_raw) {
+            errors.push({ row: rowNum, field: "class", message: "Не может быть пустым" });
+            rowValid = false;
+          } else {
+            grade = parseInt(class_raw, 10);
+            if (isNaN(grade) || grade < 1 || grade > 11) {
+              errors.push({ row: rowNum, field: "class", message: "Должно быть числом от 1 до 11" });
+              rowValid = false;
+            }
+          }
+
+          if (!subject) {
+            errors.push({ row: rowNum, field: "subject", message: "Не может быть пустым" });
+            rowValid = false;
+          }
+
+          if (!VALID_LANGS.includes(lang)) {
+            errors.push({ row: rowNum, field: "lang", message: `Допустимо: ${VALID_LANGS.join(", ")}` });
+            rowValid = false;
+          }
+
+          let template = null;
+          if (template_raw && template_raw.toLowerCase() !== "none") {
+            template = parseInt(template_raw, 10);
+            if (isNaN(template)) {
+              errors.push({ row: rowNum, field: "template", message: "Должно быть числом или пустым" });
+              rowValid = false;
+            }
+          }
+
+          if (rowValid) {
+            rows.push({
+              task_id,
+              book_id,
+              topic: topic_title,
+              grade,
+              subject,
+              language: LANG_MAP[lang],
+              template,
+            });
+          }
+        }
+
+        return { errors, rows };
+      }
+
+      function renderFeedback({ errors, rows }) {
+        csvFeedback.innerHTML = "";
+
+        if (errors.length > 0) {
+          const header = document.createElement("div");
+          header.className = "feedback-error-header";
+          header.textContent = `Найдено ошибок: ${errors.length}`;
+          csvFeedback.appendChild(header);
+
+          const table = document.createElement("table");
+          table.className = "error-table";
+          table.innerHTML = `<thead><tr><th>Строка</th><th>Поле</th><th>Ошибка</th></tr></thead>`;
+          const tbody = document.createElement("tbody");
+          errors.forEach(({ row, field, message }) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${row}</td><td>${field}</td><td>${message}</td>`;
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          csvFeedback.appendChild(table);
+        } else {
+          const success = document.createElement("div");
+          success.className = "feedback-success";
+          success.textContent = `Файл проверен: ${rows.length} записей, ошибок нет. Готово к добавлению в очередь.`;
+          csvFeedback.appendChild(success);
+        }
+      }
+
+      csvFile.addEventListener("change", () => {
+        validatedRows = [];
+        btnQueue.disabled = true;
+        csvFeedback.innerHTML = "";
+        queueError.textContent = "";
+      });
+
+      btnVerify.addEventListener("click", () => {
+        const file = csvFile.files[0];
+        if (!file) {
+          csvFeedback.innerHTML = '<div class="error" style="margin-top:8px">Выберите файл</div>';
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const { errors, rows } = parseCsv(e.target.result);
+          renderFeedback({ errors, rows });
+          validatedRows = rows;
+          btnQueue.disabled = errors.length > 0 || rows.length === 0;
+        };
+        reader.readAsText(file, "UTF-8");
+      });
+
+      btnQueue.addEventListener("click", async () => {
+        if (validatedRows.length === 0) return;
+
+        btnQueue.disabled = true;
+        btnVerify.disabled = true;
+        queueError.textContent = "";
+
+        const slidesAmount = parseInt(csvSlidesAmount.value, 10);
+
+        const results = await Promise.allSettled(
+          validatedRows.map((row) =>
+            fetch("/api/presentations/", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                topic: row.topic,
+                language: row.language,
+                slides_amount: slidesAmount,
+                grade: row.grade,
+                subject: row.subject,
+                author: null,
+                task_id: row.task_id,
+                book_id: row.book_id,
+                template: row.template,
+              }),
+            }).then(async (resp) => {
+              if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || "Ошибка при создании");
+              }
+              return { row, data: await resp.json() };
+            })
+          )
+        );
+
+        const queueErrors = [];
+        let skippedCount = 0;
+        results.forEach((result) => {
+          if (result.status === "fulfilled") {
+            const { row, data } = result.value;
+            if (data.skipped) {
+              skippedCount++;
+              return;
+            }
+            const ui = createTaskRow({
+              topic: row.topic,
+              language: row.language,
+              slides_amount: slidesAmount,
+              id: data.id,
+            });
+            connectSocket(data.id, ui);
+          } else {
+            queueErrors.push(result.reason?.message || "Неизвестная ошибка");
+          }
+        });
+
+        const messages = [];
+        if (skippedCount > 0) messages.push(`Пропущено ${skippedCount} (task_id уже существует)`);
+        if (queueErrors.length > 0) messages.push(queueErrors.join(", "));
+        queueError.textContent = messages.join(" | ");
+
+        btnVerify.disabled = false;
+        btnQueue.disabled = false;
       });
     </script>
   </body>

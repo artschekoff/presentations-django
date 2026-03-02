@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: help install migrate makemigrations run shell test run-all
+.PHONY: help install migrate makemigrations run shell test run-all lint kill
 .PHONY: buildx-init build-amd64 build-amd64-push
 .PHONY: secretkey addmodule refresh-module
 
@@ -11,9 +11,13 @@ help:
 	@printf "shell         Open Django shell\n"
 	@printf "test          Run Django tests\n"
 	@printf "run-all       Start Celery worker and ASGI server\n"
+	@printf "lint          Run pylint on project source files\n"
 	@printf "buildx-init   Create and select buildx builder\n"
 	@printf "build-amd64   Build linux/amd64 image and load locally\n"
 	@printf "build-amd64-push Build linux/amd64 image and push to registry\n"
+
+PYTHON ?= .venv/bin/python3
+CELERY_CONCURRENCY ?= 6
 
 REGISTRY ?= ghcr.io/artschekoff
 IMAGE ?= presentations-django
@@ -41,11 +45,21 @@ migrate:
 test:
 	python3 manage.py test
 
+lint:
+	$(PYTHON) -m pylint presentations presentations_app
+
+kill:
+	@lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+	@pkill -f "celery.*presentations" 2>/dev/null || true
+	@pkill -f "daphne.*presentations" 2>/dev/null || true
+	@pkill -f "manage.py" 2>/dev/null || true
+	@echo "Done"
+
 run-all:
 	@bash -c 'set -euo pipefail; \
-	python3 -m celery -A presentations worker -l info & CELERY_PID=$$!; \
-	python3 -m daphne -b 0.0.0.0 -p 8000 presentations.asgi:application & DAPHNE_PID=$$!; \
-	trap "test -n \"$${DAPHNE_PID:-}\" && kill $$DAPHNE_PID; test -n \"$${CELERY_PID:-}\" && kill $$CELERY_PID" EXIT; \
+	$(PYTHON) -m celery -A presentations worker -l info --concurrency=$(CELERY_CONCURRENCY) & CELERY_PID=$$!; \
+	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 presentations.asgi:application & DAPHNE_PID=$$!; \
+	trap "kill $$DAPHNE_PID 2>/dev/null; kill $$CELERY_PID 2>/dev/null" EXIT; \
 	wait $$DAPHNE_PID'
 
 secretkey:

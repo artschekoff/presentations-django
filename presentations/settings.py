@@ -33,8 +33,18 @@ def _int_env(name: str, default: int) -> int:
     value = os.getenv(name)
     if value is None:
         return default
+    cleaned = value.strip()
+    if "*" in cleaned:
+        try:
+            parts = [int(part.strip()) for part in cleaned.split("*")]
+            product = 1
+            for part in parts:
+                product *= part
+            return product
+        except ValueError:
+            return default
     try:
-        return int(value)
+        return int(cleaned)
     except ValueError:
         return default
 
@@ -144,6 +154,10 @@ PRESENTATIONS_ASSETS_DIR = str(
 PRESENTATIONS_GENERATION_TIMEOUT_MS = _int_env(
     "PRESENTATIONS_GENERATION_TIMEOUT_MS",
     1200000,
+)
+PLAYWRIGHT_DEFAULT_TIMEOUT_MS = _int_env(
+    "PLAYWRIGHT_DEFAULT_TIMEOUT_MS",
+    90000,
 )
 
 CHANNEL_REDIS_URL = _read_env("CHANNEL_REDIS_URL", CELERY_BROKER_URL)

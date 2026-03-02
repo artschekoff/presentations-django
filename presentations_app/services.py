@@ -18,8 +18,12 @@ class PresentationService:
             topic=command.topic,
             language=command.language,
             slides_amount=command.slides_amount,
-            audience=command.audience,
+            grade=command.grade,
+            subject=command.subject,
             author=command.author,
+            task_id=command.task_id,
+            book_id=command.book_id,
+            template=command.template,
             status=command.status,
             files=list(command.files),
         )

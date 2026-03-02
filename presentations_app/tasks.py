@@ -11,6 +11,7 @@ from asgiref.sync import sync_to_async
 from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.db.models import F
 from django.urls import reverse
 from playwright.async_api import async_playwright
 
@@ -56,8 +57,8 @@ def _log_event(
     )
 
 
-@shared_task(bind=True)
-def generate_presentation_task(self, presentation_id: str) -> None:
+@shared_task
+def generate_presentation_task(presentation_id: str) -> None:
     sokratic_logger = logging.getLogger("presentations_module")
     if not sokratic_logger.handlers:
         handler = logging.StreamHandler()
@@ -80,14 +81,14 @@ def generate_presentation_task(self, presentation_id: str) -> None:
         presentation,
         kind="status",
         message="Queued for generation",
-        stage="queued",
+        stage="pending",
         percent=0,
     )
     asyncio.run(
         _send_progress_async(
             presentation_id,
             {
-                "stage": "queued",
+                "stage": "pending",
                 "step": 0,
                 "total_steps": 7,
                 "percent": 0,
@@ -104,6 +105,7 @@ def generate_presentation_task(self, presentation_id: str) -> None:
             logger=sokratic_logger,
             assets_dir=settings.PRESENTATIONS_ASSETS_DIR,
             generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
+            playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
         )
         if not hasattr(source, "browser"):
             source.browser = None
@@ -134,7 +136,8 @@ def generate_presentation_task(self, presentation_id: str) -> None:
                 topic=presentation.topic,
                 language=presentation.language,
                 slides_amount=presentation.slides_amount,
-                audience=presentation.audience,
+                grade=str(presentation.grade),
+                subject=presentation.subject,
                 author=presentation.author,
             ):
                 payload = dict(update)
@@ -219,28 +222,67 @@ def generate_presentation_task(self, presentation_id: str) -> None:
                 },
             )
         )
-    except Exception as exc:  # pragma: no cover - runtime failures surfaced via socket
+    # Intentional broad catch: task may fail for any reason (network, Playwright, API).
+    except Exception as exc:  # pragma: no cover
         logger.exception(
             "Generate task failed for presentation %s: %s", presentation_id, exc
         )
-        Presentation.objects.filter(id=presentation_id).update(status="failed")
-        _log_event(
-            presentation,
-            kind="error",
-            message=str(exc),
-            stage="failed",
-            percent=0,
+        Presentation.objects.filter(id=presentation_id).update(
+            retry_count=F("retry_count") + 1,
         )
-        asyncio.run(
-            _send_progress_async(
-                presentation_id,
-                {
-                    "stage": "failed",
-                    "step": 0,
-                    "total_steps": 7,
-                    "percent": 0,
-                    "error": str(exc),
-                },
+        updated = Presentation.objects.get(id=presentation_id)
+        retry_count = updated.retry_count
+        max_retries = 3
+
+        if retry_count < max_retries:
+            logger.info(
+                "Retrying presentation %s (attempt %d/%d)",
+                presentation_id, retry_count, max_retries,
             )
-        )
-        logger.exception("Failed to generate presentation %s", presentation_id)
+            Presentation.objects.filter(id=presentation_id).update(status="pending", files=[])
+            _log_event(
+                presentation,
+                kind="error",
+                message=f"Attempt {retry_count}/{max_retries} failed: {exc}. Retrying…",
+                stage="retrying",
+                percent=0,
+            )
+            asyncio.run(
+                _send_progress_async(
+                    presentation_id,
+                    {
+                        "stage": "retrying",
+                        "retry_count": retry_count,
+                        "max_retries": max_retries,
+                        "percent": 0,
+                        "error": str(exc),
+                    },
+                )
+            )
+            generate_presentation_task.delay(presentation_id)
+        else:
+            logger.error(
+                "Presentation %s failed after %d attempts", presentation_id, retry_count,
+            )
+            Presentation.objects.filter(id=presentation_id).update(status="failed")
+            _log_event(
+                presentation,
+                kind="error",
+                message=str(exc),
+                stage="failed",
+                percent=0,
+            )
+            asyncio.run(
+                _send_progress_async(
+                    presentation_id,
+                    {
+                        "stage": "failed",
+                        "retry_count": retry_count,
+                        "max_retries": max_retries,
+                        "step": 0,
+                        "total_steps": 7,
+                        "percent": 0,
+                        "error": str(exc),
+                    },
+                )
+            )
