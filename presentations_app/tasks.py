@@ -12,10 +12,11 @@ from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db.models import F
+
 from django.urls import reverse
 from playwright.async_api import async_playwright
 
-from presentations_module import SokraticSource
+from presentations_module import SokraticSource, DownloadFormat
 
 from .models import Presentation, PresentationLog
 
@@ -55,6 +56,45 @@ def _log_event(
         stage=stage,
         percent=percent,
     )
+
+
+def _handle_task_failure(
+    presentation: Presentation, presentation_id: str, exc: Exception
+) -> None:
+    logger.exception("Generate task failed for presentation %s: %s", presentation_id, exc)
+    Presentation.objects.filter(id=presentation_id).update(retry_count=F("retry_count") + 1)
+    retry_count = Presentation.objects.get(id=presentation_id).retry_count
+    max_retries = 3
+
+    if retry_count < max_retries:
+        logger.info("Retrying presentation %s (attempt %d/%d)", presentation_id, retry_count, max_retries)
+        Presentation.objects.filter(id=presentation_id).update(status="pending", files=[])
+        _log_event(
+            presentation,
+            kind="error",
+            message=f"Attempt {retry_count}/{max_retries} failed: {exc}. Retrying…",
+            stage="retrying",
+            percent=0,
+        )
+        asyncio.run(
+            _send_progress_async(
+                presentation_id,
+                {"stage": "retrying", "retry_count": retry_count, "max_retries": max_retries,
+                 "percent": 0, "error": str(exc)},
+            )
+        )
+        generate_presentation_task.delay(presentation_id)
+    else:
+        logger.error("Presentation %s failed after %d attempts", presentation_id, retry_count)
+        Presentation.objects.filter(id=presentation_id).update(status="failed")
+        _log_event(presentation, kind="error", message=str(exc), stage="failed", percent=0)
+        asyncio.run(
+            _send_progress_async(
+                presentation_id,
+                {"stage": "failed", "retry_count": retry_count, "max_retries": max_retries,
+                 "step": 0, "total_steps": 7, "percent": 0, "error": str(exc)},
+            )
+        )
 
 
 @shared_task
@@ -139,8 +179,9 @@ def generate_presentation_task(presentation_id: str) -> None:
                 grade=str(presentation.grade),
                 subject=presentation.subject,
                 author=presentation.author,
+                formats_to_download=[DownloadFormat.POWERPOINT, DownloadFormat.TEXT]
             ):
-                payload = dict(update)
+                payload: dict[str, Any] = dict(update)
                 payload["presentation_id"] = presentation_id
                 if payload.get("files"):
                     files_now = _safe_files(payload.get("files"))
@@ -162,8 +203,8 @@ def generate_presentation_task(presentation_id: str) -> None:
                     presentation,
                     kind="progress",
                     payload=payload,
-                    stage=payload.get("stage"),
-                    percent=payload.get("percent"),
+                    stage=str(payload["stage"]) if "stage" in payload else None,
+                    percent=int(payload["percent"]) if "percent" in payload else None,
                 )
                 if payload.get("stage"):
                     logger.info(
@@ -224,65 +265,4 @@ def generate_presentation_task(presentation_id: str) -> None:
         )
     # Intentional broad catch: task may fail for any reason (network, Playwright, API).
     except Exception as exc:  # pragma: no cover
-        logger.exception(
-            "Generate task failed for presentation %s: %s", presentation_id, exc
-        )
-        Presentation.objects.filter(id=presentation_id).update(
-            retry_count=F("retry_count") + 1,
-        )
-        updated = Presentation.objects.get(id=presentation_id)
-        retry_count = updated.retry_count
-        max_retries = 3
-
-        if retry_count < max_retries:
-            logger.info(
-                "Retrying presentation %s (attempt %d/%d)",
-                presentation_id, retry_count, max_retries,
-            )
-            Presentation.objects.filter(id=presentation_id).update(status="pending", files=[])
-            _log_event(
-                presentation,
-                kind="error",
-                message=f"Attempt {retry_count}/{max_retries} failed: {exc}. Retrying…",
-                stage="retrying",
-                percent=0,
-            )
-            asyncio.run(
-                _send_progress_async(
-                    presentation_id,
-                    {
-                        "stage": "retrying",
-                        "retry_count": retry_count,
-                        "max_retries": max_retries,
-                        "percent": 0,
-                        "error": str(exc),
-                    },
-                )
-            )
-            generate_presentation_task.delay(presentation_id)
-        else:
-            logger.error(
-                "Presentation %s failed after %d attempts", presentation_id, retry_count,
-            )
-            Presentation.objects.filter(id=presentation_id).update(status="failed")
-            _log_event(
-                presentation,
-                kind="error",
-                message=str(exc),
-                stage="failed",
-                percent=0,
-            )
-            asyncio.run(
-                _send_progress_async(
-                    presentation_id,
-                    {
-                        "stage": "failed",
-                        "retry_count": retry_count,
-                        "max_retries": max_retries,
-                        "step": 0,
-                        "total_steps": 7,
-                        "percent": 0,
-                        "error": str(exc),
-                    },
-                )
-            )
+        _handle_task_failure(presentation, presentation_id, exc)

@@ -70,7 +70,7 @@ secretkey:
 
 refresh-module:
 	pip uninstall -y presentations-module || true
-	pip install /Users/riskyworks/Documents/work/presentations/presentations-module
+	pip install git+https://github.com/artschekoff/presentations-module.git
 
 buildx-init:
 	docker buildx create --use --name multiarch

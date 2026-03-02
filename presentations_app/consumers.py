@@ -54,7 +54,7 @@ class PresentationProgressConsumer(AsyncJsonWebsocketConsumer):
 
         await self.send_json(payload)
 
-    async def disconnect(self, close_code: int) -> None:
+    async def disconnect(self, code: int) -> None:  # pylint: disable=unused-argument
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def progress_message(self, event) -> None:

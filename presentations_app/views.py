@@ -54,6 +54,77 @@ class PresentationFormView(View):
         return render(request, "presentations_app/presentation_form.html")
 
 
+def _validate_create_payload(  # pylint: disable=too-many-return-statements,too-many-branches
+    payload: dict[str, Any],
+) -> tuple[CreatePresentationCommandDto | None, JsonResponse | None]:
+    """Validate POST payload and return a command DTO or an error response."""
+    required_fields = {"topic", "language", "slides_amount", "grade", "subject"}
+    missing = required_fields - payload.keys()
+    if missing:
+        return None, JsonResponse(
+            {"detail": f"Missing required fields: {', '.join(sorted(missing))}"},
+            status=400,
+        )
+
+    try:
+        slides_amount = int(payload["slides_amount"])
+    except (TypeError, ValueError):
+        return None, JsonResponse({"detail": "slides_amount must be an integer"}, status=400)
+    if slides_amount < 0:
+        return None, JsonResponse({"detail": "slides_amount must be non-negative"}, status=400)
+
+    try:
+        grade = int(payload["grade"])
+    except (TypeError, ValueError):
+        return None, JsonResponse({"detail": "grade must be an integer"}, status=400)
+    if grade < 1 or grade > 11:
+        return None, JsonResponse({"detail": "grade must be between 1 and 11"}, status=400)
+
+    files = payload.get("files", [])
+    if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
+        return None, JsonResponse({"detail": "files must be a list of strings"}, status=400)
+
+    status = payload.get("status", "pending")
+    if not isinstance(status, str):
+        return None, JsonResponse({"detail": "status must be a string"}, status=400)
+
+    author = payload.get("author")
+    if author is not None and not isinstance(author, str):
+        return None, JsonResponse({"detail": "author must be a string if provided"}, status=400)
+
+    task_id = payload.get("task_id")
+    if task_id is not None and not isinstance(task_id, str):
+        return None, JsonResponse({"detail": "task_id must be a string if provided"}, status=400)
+
+    book_id = payload.get("book_id")
+    if book_id is not None:
+        try:
+            book_id = int(book_id)
+        except (TypeError, ValueError):
+            return None, JsonResponse({"detail": "book_id must be an integer if provided"}, status=400)
+
+    template = payload.get("template")
+    if template is not None:
+        try:
+            template = int(template)
+        except (TypeError, ValueError):
+            return None, JsonResponse({"detail": "template must be an integer if provided"}, status=400)
+
+    return CreatePresentationCommandDto(
+        topic=payload["topic"],
+        language=payload["language"],
+        slides_amount=slides_amount,
+        grade=grade,
+        subject=payload["subject"],
+        author=author,
+        task_id=task_id,
+        book_id=book_id,
+        template=template,
+        files=list(files),
+        status=status,
+    ), None
+
+
 class PresentationCreateView(View):
     """Controller that creates new presentations."""
 
@@ -69,49 +140,12 @@ class PresentationCreateView(View):
         except json.JSONDecodeError:
             return JsonResponse({"detail": "Invalid JSON payload"}, status=400)
 
-        required_fields = {"topic", "language", "slides_amount", "grade", "subject"}
-        missing = required_fields - payload.keys()
-        if missing:
-            return JsonResponse(
-                {"detail": f"Missing required fields: {', '.join(sorted(missing))}"},
-                status=400,
-            )
+        command, error = _validate_create_payload(payload)
+        if error is not None:
+            return error
 
-        slides_amount_value = payload["slides_amount"]
-        try:
-            slides_amount = int(slides_amount_value)
-        except (TypeError, ValueError):
-            return JsonResponse({"detail": "slides_amount must be an integer"}, status=400)
-
-        if slides_amount < 0:
-            return JsonResponse({"detail": "slides_amount must be non-negative"}, status=400)
-
-        try:
-            grade = int(payload["grade"])
-        except (TypeError, ValueError):
-            return JsonResponse({"detail": "grade must be an integer"}, status=400)
-
-        if grade < 1 or grade > 11:
-            return JsonResponse({"detail": "grade must be between 1 and 11"}, status=400)
-
-        files = payload.get("files", [])
-        if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
-            return JsonResponse({"detail": "files must be a list of strings"}, status=400)
-
-        status = payload.get("status", "pending")
-        if not isinstance(status, str):
-            return JsonResponse({"detail": "status must be a string"}, status=400)
-
-        author = payload.get("author")
-        if author is not None and not isinstance(author, str):
-            return JsonResponse({"detail": "author must be a string if provided"}, status=400)
-
-        task_id = payload.get("task_id")
-        if task_id is not None and not isinstance(task_id, str):
-            return JsonResponse({"detail": "task_id must be a string if provided"}, status=400)
-
-        if task_id:
-            existing = Presentation.objects.filter(task_id=task_id).first()
+        if command.task_id:
+            existing = Presentation.objects.filter(task_id=command.task_id).first()
             if existing is not None:
                 return JsonResponse(
                     {
@@ -124,34 +158,6 @@ class PresentationCreateView(View):
                     },
                     status=200,
                 )
-
-        book_id = payload.get("book_id")
-        if book_id is not None:
-            try:
-                book_id = int(book_id)
-            except (TypeError, ValueError):
-                return JsonResponse({"detail": "book_id must be an integer if provided"}, status=400)
-
-        template = payload.get("template")
-        if template is not None:
-            try:
-                template = int(template)
-            except (TypeError, ValueError):
-                return JsonResponse({"detail": "template must be an integer if provided"}, status=400)
-
-        command = CreatePresentationCommandDto(
-            topic=payload["topic"],
-            language=payload["language"],
-            slides_amount=slides_amount,
-            grade=grade,
-            subject=payload["subject"],
-            author=author,
-            task_id=task_id,
-            book_id=book_id,
-            template=template,
-            files=list(files),
-            status=status,
-        )
 
         presentation = self.service.create_presentation(command.with_status("pending"))
         generate_presentation_task.delay(str(presentation.id))
@@ -248,7 +254,7 @@ class PresentationRestartView(View):
 class PresentationDownloadView(View):
     """Download the generated PDF presentation."""
 
-    def head(self, request: HttpRequest, presentation_id: str, *args: Any, **kwargs: Any):
+    def head(self, request: HttpRequest, presentation_id: str, *args: Any, **kwargs: Any):  # pylint: disable=method-hidden
         presentation = get_object_or_404(Presentation, id=presentation_id)
         pdf_path = next(
             (path for path in presentation.files if path.lower().endswith(".pdf")),
@@ -272,7 +278,7 @@ class PresentationDownloadView(View):
 class PresentationFileDownloadView(View):
     """Download any generated file by index."""
 
-    def head(
+    def head(  # pylint: disable=method-hidden
         self,
         request: HttpRequest,
         presentation_id: str,

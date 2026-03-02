@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class CreatePresentationCommandDto:
+class CreatePresentationCommandDto:  # pylint: disable=too-many-instance-attributes
     """
     Simplified command object inspired by the `PresentationDocument` from
     `presentations-module`. The fields mirror the shared dataclass.
