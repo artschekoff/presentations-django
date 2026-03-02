@@ -58,7 +58,7 @@ def _validate_create_payload(  # pylint: disable=too-many-return-statements,too-
     payload: dict[str, Any],
 ) -> tuple[CreatePresentationCommandDto | None, JsonResponse | None]:
     """Validate POST payload and return a command DTO or an error response."""
-    required_fields = {"topic", "language", "slides_amount", "grade", "subject"}
+    required_fields = {"topic", "language", "grade", "subject"}
     missing = required_fields - payload.keys()
     if missing:
         return None, JsonResponse(
@@ -67,7 +67,7 @@ def _validate_create_payload(  # pylint: disable=too-many-return-statements,too-
         )
 
     try:
-        slides_amount = int(payload["slides_amount"])
+        slides_amount = int(payload.get("slides_amount", 20))
     except (TypeError, ValueError):
         return None, JsonResponse({"detail": "slides_amount must be an integer"}, status=400)
     if slides_amount < 0:
@@ -256,23 +256,23 @@ class PresentationDownloadView(View):
 
     def head(self, request: HttpRequest, presentation_id: str, *args: Any, **kwargs: Any):  # pylint: disable=method-hidden
         presentation = get_object_or_404(Presentation, id=presentation_id)
-        pdf_path = next(
-            (path for path in presentation.files if path.lower().endswith(".pdf")),
+        pptx_path = next(
+            (path for path in presentation.files if path.lower().endswith(".pptx")),
             None,
         )
-        if not pdf_path or not os.path.exists(pdf_path):
-            raise Http404("PDF file not found")
-        return _head_download_response(pdf_path)
+        if not pptx_path or not os.path.exists(pptx_path):
+            raise Http404("Presentation file not found")
+        return _head_download_response(pptx_path)
 
     def get(self, request: HttpRequest, presentation_id: str, *args: Any, **kwargs: Any):
         presentation = get_object_or_404(Presentation, id=presentation_id)
-        pdf_path = next(
-            (path for path in presentation.files if path.lower().endswith(".pdf")),
+        pptx_path = next(
+            (path for path in presentation.files if path.lower().endswith(".pptx")),
             None,
         )
-        if not pdf_path or not os.path.exists(pdf_path):
-            raise Http404("PDF file not found")
-        return _file_download_response(pdf_path)
+        if not pptx_path or not os.path.exists(pptx_path):
+            raise Http404("Presentation file not found")
+        return _file_download_response(pptx_path)
 
 
 class PresentationFileDownloadView(View):

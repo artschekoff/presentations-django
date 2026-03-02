@@ -146,14 +146,13 @@ def generate_presentation_task(presentation_id: str) -> None:
             assets_dir=settings.PRESENTATIONS_ASSETS_DIR,
             generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
             playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
+            save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
         )
         if not hasattr(source, "browser"):
             source.browser = None
 
         try:
-            headless = (
-                os.environ.get("PRESENTATIONS_HEADLESS", "true").lower() == "true"
-            )
+            headless = settings.PRESENTATIONS_HEADLESS
             logger.info(
                 "Starting browser in %s mode for presentation %s",
                 "headless" if headless else "headed",
@@ -172,6 +171,7 @@ def generate_presentation_task(presentation_id: str) -> None:
             )
             await source.authenticate(login=login, password=password)
 
+            generation_id = presentation.task_id or str(presentation.id)
             async for update in source.generate_presentation(
                 topic=presentation.topic,
                 language=presentation.language,
@@ -179,7 +179,8 @@ def generate_presentation_task(presentation_id: str) -> None:
                 grade=str(presentation.grade),
                 subject=presentation.subject,
                 author=presentation.author,
-                formats_to_download=[DownloadFormat.POWERPOINT, DownloadFormat.TEXT]
+                formats_to_download=[DownloadFormat.POWERPOINT, DownloadFormat.TEXT],
+                generation_id=generation_id,
             ):
                 payload: dict[str, Any] = dict(update)
                 payload["presentation_id"] = presentation_id

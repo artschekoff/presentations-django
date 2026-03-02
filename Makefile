@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: help install migrate makemigrations run shell test run-all lint kill
+.PHONY: help install migrate makemigrations run shell test run-all lint kill clean
 .PHONY: buildx-init build-amd64 build-amd64-push
 .PHONY: secretkey addmodule refresh-module
 
@@ -47,6 +47,19 @@ test:
 
 lint:
 	$(PYTHON) -m pylint presentations presentations_app
+
+clean:
+	@echo "Clearing logs..."
+	@rm -rf storage/logs/*
+	@echo "Clearing generated presentations..."
+	@rm -rf storage/generated_presentations/*
+	@echo "Flushing database tables..."
+	@$(PYTHON) manage.py shell -c "\
+from presentations_app.models import Presentation, PresentationLog; \
+PresentationLog.objects.all().delete(); \
+Presentation.objects.all().delete(); \
+print('Done.')"
+	@echo "Clean complete."
 
 kill:
 	@lsof -ti :8000 | xargs kill -9 2>/dev/null || true
