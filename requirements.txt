@@ -48,7 +48,7 @@ parsy==1.1.0
 pathspec==0.12.1
 platformdirs==4.9.2
 playwright==1.57.0
-presentations_module @ file:///Users/riskyworks/Documents/work/presentations/presentations-module
+presentations_module @ git+https://github.com/artschekoff/presentations-module.git
 prompt_toolkit==3.0.52
 protobuf==6.31.1
 psycopg==3.2.10

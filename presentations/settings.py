@@ -149,7 +149,7 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 PRESENTATIONS_ASSETS_DIR = str(
-    BASE_DIR / _read_env("PRESENTATIONS_ASSETS_DIR", "generated_presentations")
+    BASE_DIR / _read_env("PRESENTATIONS_ASSETS_DIR", "storage/generated_presentations")
 )
 PRESENTATIONS_GENERATION_TIMEOUT_MS = _int_env(
     "PRESENTATIONS_GENERATION_TIMEOUT_MS",
@@ -168,7 +168,7 @@ CHANNEL_LAYERS = {
     }
 }
 
-LOG_DIR = BASE_DIR / "logs"
+LOG_DIR = BASE_DIR / "storage" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 LOGGING = {

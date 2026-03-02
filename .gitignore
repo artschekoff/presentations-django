@@ -11,5 +11,7 @@ dist/
 build/
 *.egg-info/
 node_modules/
-generated_presentations/
+storage/
+!storage/generated_presentations/.gitkeep
+!storage/logs/.gitkeep
 .env
