@@ -143,6 +143,12 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    "dispatch-pending-presentations": {
+        "task": "presentations_app.tasks.dispatch_pending_presentations",
+        "schedule": _int_env("PRESENTATIONS_DISPATCH_INTERVAL_S", 10),
+    },
+}
 
 STATIC_URL = "static/"
 

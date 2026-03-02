@@ -12,6 +12,7 @@ from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db.models import F
+from django.utils import timezone
 
 from django.urls import reverse
 from playwright.async_api import async_playwright
@@ -68,7 +69,10 @@ def _handle_task_failure(
 
     if retry_count < max_retries:
         logger.info("Retrying presentation %s (attempt %d/%d)", presentation_id, retry_count, max_retries)
-        Presentation.objects.filter(id=presentation_id).update(status="pending", files=[])
+        # Set back to pending — the outbox relay will re-dispatch.
+        Presentation.objects.filter(id=presentation_id).update(
+            status="pending", files=[], processing_since=None
+        )
         _log_event(
             presentation,
             kind="error",
@@ -83,7 +87,6 @@ def _handle_task_failure(
                  "percent": 0, "error": str(exc)},
             )
         )
-        generate_presentation_task.delay(presentation_id)
     else:
         logger.error("Presentation %s failed after %d attempts", presentation_id, retry_count)
         Presentation.objects.filter(id=presentation_id).update(status="failed")
@@ -116,7 +119,16 @@ def generate_presentation_task(presentation_id: str) -> None:
         logger.error("Presentation %s does not exist", presentation_id)
         return
 
-    Presentation.objects.filter(id=presentation_id).update(status="processing")
+    # Atomically claim the task: only proceed if status is still 'pending'.
+    # This prevents double-execution when the relay dispatches duplicates.
+    claimed = Presentation.objects.filter(
+        id=presentation_id, status="pending"
+    ).update(status="processing", processing_since=timezone.now())
+    if not claimed:
+        logger.info(
+            "Presentation %s already claimed or finished, skipping.", presentation_id
+        )
+        return
     _log_event(
         presentation,
         kind="status",
@@ -235,6 +247,7 @@ def generate_presentation_task(presentation_id: str) -> None:
         Presentation.objects.filter(id=presentation_id).update(
             status="done",
             files=files,
+            processing_since=None,
         )
         _log_event(
             presentation,
@@ -267,3 +280,44 @@ def generate_presentation_task(presentation_id: str) -> None:
     # Intentional broad catch: task may fail for any reason (network, Playwright, API).
     except Exception as exc:  # pragma: no cover
         _handle_task_failure(presentation, presentation_id, exc)
+
+
+@shared_task
+def dispatch_pending_presentations() -> None:
+    """Outbox relay: dispatch pending presentations and recover stuck ones.
+
+    Runs on a Celery Beat schedule (CELERY_BEAT_SCHEDULE).
+
+    Two things happen each tick:
+    1. Pending — any presentation with status='pending' is dispatched to Celery.
+       The actual task uses an atomic UPDATE WHERE status='pending' to claim work,
+       so duplicate dispatches are safe.
+    2. Stuck — any presentation with status='processing' whose processing_since
+       is older than the generation timeout is reset to 'pending' so it will be
+       re-dispatched on the next tick.
+    """
+    # --- recover stuck processing tasks ---
+    timeout_s = settings.PRESENTATIONS_GENERATION_TIMEOUT_MS / 1000
+    stuck_cutoff = timezone.now() - timezone.timedelta(seconds=timeout_s)
+    stuck_ids = list(
+        Presentation.objects.filter(
+            status="processing",
+            processing_since__lt=stuck_cutoff,
+        ).values_list("id", flat=True)
+    )
+    if stuck_ids:
+        logger.warning(
+            "Outbox relay: resetting %d stuck presentation(s) to pending.", len(stuck_ids)
+        )
+        Presentation.objects.filter(id__in=stuck_ids).update(
+            status="pending", processing_since=None
+        )
+
+    # --- dispatch all pending tasks ---
+    pending_ids = list(
+        Presentation.objects.filter(status="pending").values_list("id", flat=True)
+    )
+    for pres_id in pending_ids:
+        generate_presentation_task.delay(str(pres_id))
+    if pending_ids:
+        logger.info("Outbox relay dispatched %d presentation(s).", len(pending_ids))

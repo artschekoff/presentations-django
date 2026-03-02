@@ -17,7 +17,7 @@ help:
 	@printf "build-amd64-push Build linux/amd64 image and push to registry\n"
 
 PYTHON ?= .venv/bin/python3
-CELERY_CONCURRENCY ?= 6
+CELERY_CONCURRENCY ?= 4
 
 REGISTRY ?= ghcr.io/artschekoff
 IMAGE ?= presentations-django
@@ -71,8 +71,9 @@ kill:
 run-all:
 	@bash -c 'set -euo pipefail; \
 	$(PYTHON) -m celery -A presentations worker -l info --concurrency=$(CELERY_CONCURRENCY) & CELERY_PID=$$!; \
+	$(PYTHON) -m celery -A presentations beat -l info & BEAT_PID=$$!; \
 	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 presentations.asgi:application & DAPHNE_PID=$$!; \
-	trap "kill $$DAPHNE_PID 2>/dev/null; kill $$CELERY_PID 2>/dev/null" EXIT; \
+	trap "kill $$DAPHNE_PID 2>/dev/null; kill $$BEAT_PID 2>/dev/null; kill $$CELERY_PID 2>/dev/null" EXIT; \
 	wait $$DAPHNE_PID'
 
 secretkey:

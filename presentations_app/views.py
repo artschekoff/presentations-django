@@ -18,7 +18,6 @@ from django.utils.decorators import method_decorator
 from .dto import CreatePresentationCommandDto
 from .models import Presentation
 from .services import PresentationService
-from .tasks import generate_presentation_task
 
 
 def _download_headers(file_path: str) -> dict[str, str]:
@@ -160,7 +159,7 @@ class PresentationCreateView(View):
                 )
 
         presentation = self.service.create_presentation(command.with_status("pending"))
-        generate_presentation_task.delay(str(presentation.id))
+        # No explicit dispatch — the outbox relay (Celery Beat) will pick it up.
         return JsonResponse(
             {
                 "id": str(presentation.id),
@@ -235,7 +234,7 @@ class PresentationRestartView(View):
     def post(self, request: HttpRequest, presentation_id: str, *args: Any, **kwargs: Any) -> JsonResponse:
         presentation = get_object_or_404(Presentation, id=presentation_id)
         Presentation.objects.filter(id=presentation_id).update(status="pending", files=[], retry_count=0)
-        generate_presentation_task.delay(str(presentation.id))
+        # No explicit dispatch — the outbox relay (Celery Beat) will pick it up.
         return JsonResponse(
             {
                 "id": str(presentation.id),

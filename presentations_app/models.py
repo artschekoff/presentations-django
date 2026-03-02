@@ -21,6 +21,7 @@ class Presentation(models.Model):
     template = models.IntegerField(blank=True, null=True)
     status = models.CharField(max_length=32, default="pending")
     retry_count = models.PositiveSmallIntegerField(default=0)
+    processing_since = models.DateTimeField(null=True, blank=True)
     files = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

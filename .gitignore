@@ -14,3 +14,4 @@ node_modules/
 docker/data/
 storage/
 .env
+celerybeat-schedule*
