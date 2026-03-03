@@ -297,34 +297,37 @@ def dispatch_pending_presentations() -> None:
        is older than the generation timeout is reset to 'pending' so it will be
        re-dispatched on the next tick.
     """
-    # --- recover stuck processing tasks ---
-    timeout_s = settings.PRESENTATIONS_GENERATION_TIMEOUT_MS / 1000
-    stuck_cutoff = timezone.now() - timezone.timedelta(seconds=timeout_s)
+    try:
+        # --- recover stuck processing tasks ---
+        timeout_s = settings.PRESENTATIONS_GENERATION_TIMEOUT_MS / 1000
+        stuck_cutoff = timezone.now() - timezone.timedelta(seconds=timeout_s)
 
-    from django.db.models import Count
-    status_counts = (
-        Presentation.objects.values("status").annotate(n=Count("id"))
-    )
-    logger.info("Outbox relay DB snapshot: %s", {r["status"]: r["n"] for r in status_counts})
-    stuck_ids = list(
-        Presentation.objects.filter(
-            Q(status="processing", processing_since__lt=stuck_cutoff)
-            | Q(status="processing", processing_since__isnull=True)
-        ).values_list("id", flat=True)
-    )
-    if stuck_ids:
-        logger.warning(
-            "Outbox relay: resetting %d stuck presentation(s) to pending.", len(stuck_ids)
+        from django.db.models import Count
+        status_counts = (
+            Presentation.objects.values("status").annotate(n=Count("id"))
         )
-        Presentation.objects.filter(id__in=stuck_ids).update(
-            status="pending", processing_since=None
+        logger.info("Outbox relay DB snapshot: %s", {r["status"]: r["n"] for r in status_counts})
+        stuck_ids = list(
+            Presentation.objects.filter(
+                Q(status="processing", processing_since__lt=stuck_cutoff)
+                | Q(status="processing", processing_since__isnull=True)
+            ).values_list("id", flat=True)
         )
+        if stuck_ids:
+            logger.warning(
+                "Outbox relay: resetting %d stuck presentation(s) to pending.", len(stuck_ids)
+            )
+            Presentation.objects.filter(id__in=stuck_ids).update(
+                status="pending", processing_since=None
+            )
 
-    # --- dispatch all pending tasks ---
-    pending_ids = list(
-        Presentation.objects.filter(status="pending").values_list("id", flat=True)
-    )
-    for pres_id in pending_ids:
-        generate_presentation_task.delay(str(pres_id))
-    if pending_ids:
-        logger.info("Outbox relay dispatched %d presentation(s).", len(pending_ids))
+        # --- dispatch all pending tasks ---
+        pending_ids = list(
+            Presentation.objects.filter(status="pending").values_list("id", flat=True)
+        )
+        for pres_id in pending_ids:
+            generate_presentation_task.delay(str(pres_id))
+        if pending_ids:
+            logger.info("Outbox relay dispatched %d presentation(s).", len(pending_ids))
+    except Exception:
+        logger.exception("Outbox relay failed")

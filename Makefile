@@ -2,6 +2,7 @@ SHELL := /bin/bash
 .PHONY: help install migrate makemigrations run shell test run-all lint kill clean
 .PHONY: buildx-init build-amd64 build-amd64-push
 .PHONY: secretkey addmodule refresh-module
+.PHONY: sync-remote
 
 help:
 	@printf "install       Install dependencies from requirements.txt\n"
@@ -11,6 +12,7 @@ help:
 	@printf "shell         Open Django shell\n"
 	@printf "test          Run Django tests\n"
 	@printf "run-all       Start Celery worker and ASGI server\n"
+	@printf "debug         Start all services with DJANGO_DEBUG=1 and verbose logs\n"
 	@printf "lint          Run pylint on project source files\n"
 	@printf "buildx-init   Create and select buildx builder\n"
 	@printf "build-amd64   Build linux/amd64 image and load locally\n"
@@ -76,6 +78,14 @@ run-all:
 	trap "kill $$DAPHNE_PID 2>/dev/null; kill $$BEAT_PID 2>/dev/null; kill $$CELERY_PID 2>/dev/null" EXIT; \
 	wait $$DAPHNE_PID'
 
+debug:
+	@DJANGO_DEBUG=1 bash -c 'set -euo pipefail; \
+	$(PYTHON) -m celery -A presentations worker -l debug --concurrency=1 & CELERY_PID=$$!; \
+	$(PYTHON) -m celery -A presentations beat -l debug & BEAT_PID=$$!; \
+	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 presentations.asgi:application & DAPHNE_PID=$$!; \
+	trap "kill $$DAPHNE_PID 2>/dev/null; kill $$BEAT_PID 2>/dev/null; kill $$CELERY_PID 2>/dev/null" EXIT; \
+	wait $$DAPHNE_PID'
+
 secretkey:
 	python3 - <<'PY'
 	from django.core.management.utils import get_random_secret_key
@@ -94,6 +104,10 @@ build-amd64:
 
 build-amd64-push:
 	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --build-arg CACHEBUST=$$(date +%s) --push .
+
+sync-remote:
+	mkdir -p storage/remote
+	rsync -avz --progress trafficconnect:/home/techcode/gdz/storage/ storage/remote/
 
 deploy:
 	wget -qO- https://docker.nftwitting.com/api/deploy/compose/eB6AM2XrQE5Gv_H501-xM

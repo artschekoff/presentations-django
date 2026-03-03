@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import uuid
+import secrets
 from django.db import models
+from django.contrib.auth.models import User
 
 
 class Presentation(models.Model):
@@ -48,5 +50,18 @@ class PresentationLog(models.Model):
     class Meta:
         ordering = ("created_at",)
 
+
+class UserToken(models.Model):
+    """API token for authenticated users."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="api_token")
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = secrets.token_urlsafe(48)
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
-        return f"{self.presentation_id} {self.kind} {self.stage or ''}".strip()
+        return f"Token for {self.user.username}"

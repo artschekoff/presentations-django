@@ -53,6 +53,15 @@ SECRET_KEY = _read_env("DJANGO_SECRET_KEY", "django-insecure-REPLACE_WITH_YOUR_S
 DEBUG = _bool_env("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = _list_env("DJANGO_ALLOWED_HOSTS")
 
+# CSRF trusted origins - allow requests from specified domains
+_csrf_origins = _list_env("CSRF_TRUSTED_ORIGINS") or [
+    f"https://{host}" for host in ALLOWED_HOSTS
+] or []
+# Always allow localhost for development
+if DEBUG:
+    _csrf_origins.extend(["http://localhost", "http://127.0.0.1", "http://localhost:8000", "http://127.0.0.1:8000"])
+CSRF_TRUSTED_ORIGINS = list(set(_csrf_origins))  # Remove duplicates
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -66,6 +75,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -151,6 +161,7 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

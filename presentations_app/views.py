@@ -4,20 +4,52 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from functools import wraps
 
 import os
 import mimetypes
 
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.views import View
-from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.contrib.auth import authenticate, login as django_login, logout as django_logout
+from django.contrib.auth.decorators import login_required
 
 from .dto import CreatePresentationCommandDto
-from .models import Presentation
+from .models import Presentation, UserToken
 from .services import PresentationService
+
+
+# Simple API token authentication
+API_TOKEN = os.environ.get("PRESENTATION_API_TOKEN", "")
+
+
+def _require_api_token(view_func):
+    """Decorator to verify API token or user token in Authorization header."""
+    @wraps(view_func)
+    def wrapper(request: HttpRequest, *args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        
+        # Check Bearer token
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # Remove "Bearer " prefix
+            
+            # Check static API token
+            if API_TOKEN and token == API_TOKEN:
+                return view_func(request, *args, **kwargs)
+            
+            # Check user token
+            try:
+                user_token = UserToken.objects.get(token=token)
+                request.user = user_token.user
+                return view_func(request, *args, **kwargs)
+            except UserToken.DoesNotExist:
+                return JsonResponse({"detail": "Invalid API token"}, status=403)
+        
+        return JsonResponse({"detail": "Missing or invalid Authorization header"}, status=401)
+    return wrapper
 
 
 def _download_headers(file_path: str) -> dict[str, str]:
@@ -50,7 +82,49 @@ class PresentationFormView(View):
     """Render the presentation generation form."""
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any):
-        return render(request, "presentations_app/presentation_form.html")
+        context = {}
+        if request.user.is_authenticated:
+            try:
+                token_obj = UserToken.objects.get(user=request.user)
+                context["api_token"] = token_obj.token
+            except UserToken.DoesNotExist:
+                pass
+        return render(request, "presentations_app/presentation_form.html", context)
+
+
+class LoginView(View):
+    """User login view."""
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any):
+        if request.user.is_authenticated:
+            return redirect("presentation-form")
+        return render(request, "presentations_app/login.html")
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any):
+        username = request.POST.get("username", "")
+        password = request.POST.get("password", "")
+        
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            django_login(request, user)
+            # Generate or get token for user
+            UserToken.objects.get_or_create(user=user)
+            return redirect("presentation-form")
+        else:
+            return render(
+                request,
+                "presentations_app/login.html",
+                {"error": "Invalid username or password"},
+                status=401,
+            )
+
+
+class LogoutView(View):
+    """User logout view."""
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any):
+        django_logout(request)
+        return redirect("login")
 
 
 def _validate_create_payload(  # pylint: disable=too-many-return-statements,too-many-branches
@@ -129,10 +203,7 @@ class PresentationCreateView(View):
 
     service = PresentationService()
 
-    @method_decorator(csrf_exempt)
-    def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
-        return super().dispatch(request, *args, **kwargs)
-
+    @method_decorator(_require_api_token)
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
         try:
             payload = json.loads(request.body.decode("utf-8"))
@@ -178,6 +249,26 @@ class PresentationCreateView(View):
             },
             status=201,
         )
+
+
+class PresentationCheckTaskIdsView(View):
+    """Return which of the supplied task_ids already exist in the DB."""
+
+    @method_decorator(_require_api_token)
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({"detail": "Invalid JSON payload"}, status=400)
+
+        task_ids = payload.get("task_ids", [])
+        if not isinstance(task_ids, list) or not all(isinstance(t, str) for t in task_ids):
+            return JsonResponse({"detail": "task_ids must be a list of strings"}, status=400)
+
+        existing = list(
+            Presentation.objects.filter(task_id__in=task_ids).values_list("task_id", flat=True)
+        )
+        return JsonResponse({"existing": existing})
 
 
 class PresentationActiveView(View):
@@ -227,10 +318,7 @@ class PresentationActiveView(View):
 class PresentationRestartView(View):
     """Reset a failed presentation to pending and re-queue it."""
 
-    @method_decorator(csrf_exempt)
-    def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
-        return super().dispatch(request, *args, **kwargs)
-
+    @method_decorator(_require_api_token)
     def post(self, request: HttpRequest, presentation_id: str, *args: Any, **kwargs: Any) -> JsonResponse:
         presentation = get_object_or_404(Presentation, id=presentation_id)
         Presentation.objects.filter(id=presentation_id).update(status="pending", files=[], retry_count=0)

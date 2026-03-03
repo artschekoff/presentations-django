@@ -16,11 +16,11 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt
 
-ARG CACHEBUST=1
-RUN pip install --no-cache-dir git+https://github.com/artschekoff/presentations-module.git
-
 RUN playwright install-deps chromium
 RUN playwright install chromium
+
+ARG CACHEBUST=1
+RUN pip install --no-cache-dir git+https://github.com/artschekoff/presentations-module.git
 
 COPY . /app
 RUN chmod +x /app/docker/start-web.sh

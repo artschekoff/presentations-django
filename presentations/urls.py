@@ -7,10 +7,14 @@ from presentations_app.views import (
     PresentationDownloadView,
     PresentationFileDownloadView,
     PresentationFormView,
+    LoginView,
+    LogoutView,
 )
 
 urlpatterns = [
     path("", PresentationFormView.as_view(), name="presentation-form"),
+    path("login/", LoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
     path("admin/", admin.site.urls),
     path("api/presentations/", include("presentations_app.urls")),
     path(

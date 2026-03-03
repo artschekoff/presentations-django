@@ -22,4 +22,7 @@ while [ "$attempt" -le "$max_attempts" ]; do
   sleep 2
 done
 
+echo "Collecting static files..."
+python manage.py collectstatic --noinput
+
 exec supervisord -c /app/supervisord.conf

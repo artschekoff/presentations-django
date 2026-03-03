@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Вход</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f1ea;
+        --panel: #ffffff;
+        --ink: #1f1f1f;
+        --muted: #5b5b5b;
+        --accent: #2f6fed;
+        --accent-2: #0f3eaa;
+        --border: #d7d2c9;
+        --error: #d32f2f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, #fff8e8 0%, #f1ede4 55%, #ebe6dc 100%);
+        font-family: "Georgia", "Times New Roman", serif;
+        color: var(--ink);
+      }
+
+      main {
+        max-width: 400px;
+        margin: 0 auto;
+        padding: 80px 24px;
+      }
+
+      header {
+        margin-bottom: 32px;
+        text-align: center;
+      }
+
+      h1 {
+        font-size: 32px;
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 28px;
+        box-shadow: 0 20px 60px rgba(20, 15, 10, 0.08);
+      }
+
+      form {
+        display: grid;
+        gap: 18px;
+      }
+
+      label {
+        display: block;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        font-size: 16px;
+        font-family: "Arial", sans-serif;
+      }
+
+      button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 999px;
+        padding: 12px 28px;
+        font-size: 18px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 8px;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: var(--accent-2);
+      }
+
+      button:active {
+        transform: scale(0.98);
+      }
+
+      .error {
+        background: #ffe5e5;
+        border: 1px solid var(--error);
+        color: var(--error);
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 14px;
+        margin-bottom: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Вход в систему</h1>
+      </header>
+
+      <div class="panel">
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+          {% csrf_token %}
+          
+          <div>
+            <label for="username">Имя пользователя</label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              required
+              autofocus
+              autocomplete="username"
+            />
+          </div>
+
+          <div>
+            <label for="password">Пароль</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+
+          <button type="submit">Войти</button>
+        </form>
+      </div>
+    </main>
+  </body>
+</html>

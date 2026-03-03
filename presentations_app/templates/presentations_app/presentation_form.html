@@ -348,9 +348,94 @@
         font-size: 14px;
         font-family: "Arial", sans-serif;
       }
+
+      .user-bar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: 0;
+        background: rgba(255, 255, 255, 0.95);
+        border-bottom: 1px solid var(--border);
+        padding: 12px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: "Arial", sans-serif;
+        z-index: 1000;
+      }
+
+      .user-info {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .user-info strong {
+        color: var(--ink);
+      }
+
+      .user-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .user-actions a,
+      .user-actions button {
+        font-size: 13px;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 0.2s;
+      }
+
+      .user-actions .btn-token {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .user-actions .btn-token:hover {
+        background: var(--accent-2);
+      }
+
+      .user-actions .btn-logout {
+        background: #f5f5f5;
+        color: var(--ink);
+        border: 1px solid var(--border);
+      }
+
+      .user-actions .btn-logout:hover {
+        background: #e8e8e8;
+      }
+
+      main {
+        margin-top: 65px;
+      }
+
     </style>
   </head>
   <body>
+    {% if user.is_authenticated %}
+    <div class="user-bar">
+      <div class="user-info">
+        Вы вошли как <strong>{{ user.username }}</strong>
+      </div>
+      <div class="user-actions">
+        <form method="post" action="{% url 'logout' %}" style="display: inline;">
+          {% csrf_token %}
+          <button type="submit" class="btn-logout">Выход</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="user-bar">
+      <div class="user-info">Вы не авторизованы</div>
+      <div class="user-actions">
+        <a href="{% url 'login' %}" class="btn-token">Войти</a>
+      </div>
+    </div>
+    {% endif %}
     <main>
       <header>
         <h1>Сформируйте новую презентацию</h1>
@@ -460,10 +545,49 @@
       <div class="tasks" id="tasks"></div>
     </main>
 
+    {% csrf_token %}
+
     <script>
+      // --- CSRF Token ---
+      function getCsrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+      }
+
       // --- Shared ---
+      const API_TOKEN = "{{ api_token }}".trim();
       const sockets = new Map();
       const tasksEl = document.getElementById("tasks");
+
+      function getAuthHeaders() {
+        const headers = {};
+        if (API_TOKEN && API_TOKEN.length > 0) {
+          headers["Authorization"] = `Bearer ${API_TOKEN}`;
+        }
+        // Add CSRF token for POST requests
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+          headers["X-CSRFToken"] = csrfToken;
+        }
+        return headers;
+      }
+
+      // REST client with auth headers
+      async function apiFetch(url, options = {}) {
+        const defaultHeaders = {
+          "Content-Type": "application/json",
+          ...getAuthHeaders()
+        };
+
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            ...defaultHeaders,
+            ...options.headers
+          }
+        });
+
+        return response;
+      }
 
       function formatTitle(payload) {
         return `${payload.topic} • ${payload.language} • ${payload.slides_amount} слайдов`;
@@ -558,8 +682,14 @@
           restartBtn.disabled = true;
           restartBtn.textContent = "Запускаю…";
           try {
-            const resp = await fetch(`/api/presentations/${task.id}/restart/`, { method: "POST" });
-            if (!resp.ok) throw new Error(await resp.text());
+            const resp = await apiFetch(`/api/presentations/${task.id}/restart/`, { 
+              method: "POST"
+            });
+            if (!resp.ok) {
+              const errorText = await resp.text();
+              console.error(`Restart failed: ${resp.status}`, errorText);
+              throw new Error(`${resp.status}: ${errorText}`);
+            }
             // Same ID — convert row in place: remove failed styling, add progress UI
             row.classList.remove("task-row--failed");
             status.textContent = "В очереди";
@@ -636,7 +766,7 @@
         if (btn) { btn.disabled = true; btn.textContent = "Загружаю…"; }
         let added = 0;
         try {
-          const resp = await fetch("/api/presentations/active/?limit=200");
+          const resp = await apiFetch("/api/presentations/active/?limit=200");
           if (!resp.ok) {
             alert(`Ошибка загрузки активных задач: ${resp.status} ${resp.statusText}`);
             if (btn) { btn.disabled = false; btn.textContent = "Загрузить активные задачи"; }
@@ -701,9 +831,8 @@
         };
 
         try {
-          const response = await fetch("/api/presentations/", {
+          const response = await apiFetch("/api/presentations/", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
 
@@ -856,7 +985,7 @@
         return { errors, rows };
       }
 
-      function renderFeedback({ errors, rows }) {
+      function renderFeedback({ errors, rows, skippedCount = 0 }) {
         csvFeedback.innerHTML = "";
 
         if (errors.length > 0) {
@@ -879,7 +1008,8 @@
         } else {
           const success = document.createElement("div");
           success.className = "feedback-success";
-          success.textContent = `Файл проверен: ${rows.length} записей, ошибок нет. Готово к добавлению в очередь.`;
+          const skipNote = skippedCount > 0 ? ` Пропущено ${skippedCount} (task_id уже в базе).` : "";
+          success.textContent = `Файл проверен: ${rows.length} новых записей.${skipNote} Готово к добавлению в очередь.`;
           csvFeedback.appendChild(success);
         }
       }
@@ -899,11 +1029,38 @@
         }
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           const { errors, rows } = parseCsv(e.target.result);
-          renderFeedback({ errors, rows });
-          validatedRows = rows;
-          btnQueue.disabled = errors.length > 0 || rows.length === 0;
+
+          if (errors.length > 0 || rows.length === 0) {
+            renderFeedback({ errors, rows });
+            validatedRows = [];
+            btnQueue.disabled = true;
+            return;
+          }
+
+          // Check which task_ids already exist in the DB.
+          let existingSet = new Set();
+          try {
+            const resp = await apiFetch("/api/presentations/check-task-ids/", {
+              method: "POST",
+              body: JSON.stringify({ task_ids: rows.map((r) => r.task_id).filter(Boolean) }),
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              existingSet = new Set(data.existing || []);
+            }
+          } catch (err) {
+            console.warn("Failed to check existing task_ids:", err);
+            // If the check fails, proceed with all rows (server will deduplicate anyway).
+          }
+
+          const newRows = rows.filter((r) => !existingSet.has(r.task_id));
+          const skippedCount = rows.length - newRows.length;
+
+          validatedRows = newRows;
+          renderFeedback({ errors: [], rows: newRows, skippedCount });
+          btnQueue.disabled = newRows.length === 0;
         };
         reader.readAsText(file, "UTF-8");
       });
@@ -919,9 +1076,8 @@
 
         const results = await Promise.allSettled(
           validatedRows.map((row) =>
-            fetch("/api/presentations/", {
+            apiFetch("/api/presentations/", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 topic: row.topic,
                 language: row.language,
@@ -944,14 +1100,9 @@
         );
 
         const queueErrors = [];
-        let skippedCount = 0;
         results.forEach((result) => {
           if (result.status === "fulfilled") {
             const { row, data } = result.value;
-            if (data.skipped) {
-              skippedCount++;
-              return;
-            }
             const ui = createTaskRow({
               topic: row.topic,
               language: row.language,
@@ -964,10 +1115,7 @@
           }
         });
 
-        const messages = [];
-        if (skippedCount > 0) messages.push(`Пропущено ${skippedCount} (task_id уже существует)`);
-        if (queueErrors.length > 0) messages.push(queueErrors.join(", "));
-        queueError.textContent = messages.join(" | ");
+        queueError.textContent = queueErrors.length > 0 ? queueErrors.join(", ") : "";
 
         btnVerify.disabled = false;
         btnQueue.disabled = false;
