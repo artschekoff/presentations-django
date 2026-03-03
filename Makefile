@@ -90,10 +90,10 @@ buildx-init:
 	docker buildx create --use --name multiarch
 
 build-amd64:
-	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --load --no-cache .
+	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --load .
 
 build-amd64-push:
-	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --push --no-cache .
+	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --push .
 
 deploy:
 	wget -qO- https://docker.nftwitting.com/api/deploy/compose/eB6AM2XrQE5Gv_H501-xM
