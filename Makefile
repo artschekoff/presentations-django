@@ -90,10 +90,10 @@ buildx-init:
 	docker buildx create --use --name multiarch
 
 build-amd64:
-	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --load .
+	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --build-arg CACHEBUST=$$(date +%s) --load .
 
 build-amd64-push:
-	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --push .
+	docker buildx build --platform linux/amd64 -t $(FULL_IMAGE) --build-arg CACHEBUST=$$(date +%s) --push .
 
 deploy:
 	wget -qO- https://docker.nftwitting.com/api/deploy/compose/eB6AM2XrQE5Gv_H501-xM

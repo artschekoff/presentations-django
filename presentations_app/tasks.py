@@ -11,7 +11,7 @@ from asgiref.sync import sync_to_async
 from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from django.urls import reverse
@@ -300,10 +300,16 @@ def dispatch_pending_presentations() -> None:
     # --- recover stuck processing tasks ---
     timeout_s = settings.PRESENTATIONS_GENERATION_TIMEOUT_MS / 1000
     stuck_cutoff = timezone.now() - timezone.timedelta(seconds=timeout_s)
+
+    from django.db.models import Count
+    status_counts = (
+        Presentation.objects.values("status").annotate(n=Count("id"))
+    )
+    logger.info("Outbox relay DB snapshot: %s", {r["status"]: r["n"] for r in status_counts})
     stuck_ids = list(
         Presentation.objects.filter(
-            status="processing",
-            processing_since__lt=stuck_cutoff,
+            Q(status="processing", processing_since__lt=stuck_cutoff)
+            | Q(status="processing", processing_since__isnull=True)
         ).values_list("id", flat=True)
     )
     if stuck_ids:
