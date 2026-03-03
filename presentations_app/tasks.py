@@ -159,6 +159,7 @@ def generate_presentation_task(presentation_id: str) -> None:
             generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
             playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
             save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
+            site_throttle_delay_ms=settings.PRESENTATIONS_SITE_THROTTLE_DELAY_MS,
         )
         if not hasattr(source, "browser"):
             source.browser = None
