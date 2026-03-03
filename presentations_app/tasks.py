@@ -288,6 +288,7 @@ def dispatch_pending_presentations() -> None:
     """Outbox relay: dispatch pending presentations and recover stuck ones.
 
     Runs on a Celery Beat schedule (CELERY_BEAT_SCHEDULE).
+    Default interval: 30 minutes (1800 seconds), configurable via PRESENTATIONS_DISPATCH_INTERVAL_S env var.
 
     Two things happen each tick:
     1. Pending — any presentation with status='pending' is dispatched to Celery.

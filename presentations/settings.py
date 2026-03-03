@@ -156,7 +156,7 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
     "dispatch-pending-presentations": {
         "task": "presentations_app.tasks.dispatch_pending_presentations",
-        "schedule": _int_env("PRESENTATIONS_DISPATCH_INTERVAL_S", 10),
+        "schedule": _int_env("PRESENTATIONS_DISPATCH_INTERVAL_S", 1800),  # 30 minutes
     },
 }
 
