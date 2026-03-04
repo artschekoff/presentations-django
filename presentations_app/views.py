@@ -16,6 +16,7 @@ from django.views import View
 from django.utils.decorators import method_decorator
 from django.conf import settings
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
+from django.db import connection, transaction
 
 from .dto import CreatePresentationCommandDto
 from .models import Presentation, UserToken
@@ -220,6 +221,8 @@ class PresentationCreateView(View):
         command, error = _validate_create_payload(payload)
         if error is not None:
             return error
+        if command is None:
+            return JsonResponse({"detail": "Invalid payload"}, status=400)
 
         if command.task_id:
             existing = Presentation.objects.filter(task_id=command.task_id).first()
@@ -261,6 +264,47 @@ class PresentationCreateView(View):
 class PresentationCheckTaskIdsView(View):
     """Return which of the supplied task_ids already exist in the DB."""
 
+    batch_size = 1000
+
+    def _existing_via_batches(self, unique_task_ids: list[str]) -> set[str]:
+        existing_set: set[str] = set()
+        for offset in range(0, len(unique_task_ids), self.batch_size):
+            batch = unique_task_ids[offset : offset + self.batch_size]
+            existing_set.update(
+                Presentation.objects.filter(task_id__in=batch).values_list("task_id", flat=True)
+            )
+        return existing_set
+
+    def _existing_via_temp_table(self, unique_task_ids: list[str]) -> set[str]:
+        if not unique_task_ids:
+            return set()
+
+        table_name = connection.ops.quote_name(Presentation._meta.db_table)
+        existing_set: set[str] = set()
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("DROP TABLE IF EXISTS tmp_task_ids")
+                cursor.execute(
+                    "CREATE TEMP TABLE tmp_task_ids (task_id text PRIMARY KEY) ON COMMIT DROP"
+                )
+                for offset in range(0, len(unique_task_ids), self.batch_size):
+                    batch = unique_task_ids[offset : offset + self.batch_size]
+                    cursor.executemany(
+                        "INSERT INTO tmp_task_ids (task_id) VALUES (%s) ON CONFLICT DO NOTHING",
+                        [(task_id,) for task_id in batch],
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT p.task_id
+                    FROM {table_name} p
+                    INNER JOIN tmp_task_ids t ON t.task_id = p.task_id
+                    WHERE p.task_id IS NOT NULL
+                    """
+                )
+                existing_set = {row[0] for row in cursor.fetchall() if row and row[0] is not None}
+        return existing_set
+
     @method_decorator(_require_api_token)
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
         try:
@@ -272,9 +316,14 @@ class PresentationCheckTaskIdsView(View):
         if not isinstance(task_ids, list) or not all(isinstance(t, str) for t in task_ids):
             return JsonResponse({"detail": "task_ids must be a list of strings"}, status=400)
 
-        existing = list(
-            Presentation.objects.filter(task_id__in=task_ids).values_list("task_id", flat=True)
-        )
+        unique_task_ids = list(dict.fromkeys(task_ids))
+
+        if connection.vendor == "postgresql":
+            existing_set = self._existing_via_temp_table(unique_task_ids)
+        else:
+            existing_set = self._existing_via_batches(unique_task_ids)
+
+        existing = [task_id for task_id in unique_task_ids if task_id in existing_set]
         return JsonResponse({"existing": existing})
 
 

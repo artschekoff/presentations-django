@@ -18,7 +18,7 @@ class Presentation(models.Model):
     grade = models.PositiveSmallIntegerField()
     subject = models.CharField(max_length=255)
     author = models.CharField(max_length=255, blank=True, null=True)
-    task_id = models.CharField(max_length=255, blank=True, null=True)
+    task_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     book_id = models.IntegerField(blank=True, null=True)
     template = models.IntegerField(blank=True, null=True)
     status = models.CharField(max_length=32, default="pending")
