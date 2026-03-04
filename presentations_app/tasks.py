@@ -63,13 +63,13 @@ def _log_event(
 def _handle_task_failure(
     presentation: Presentation, presentation_id: str, exc: Exception
 ) -> None:
-    logger.exception("Generate task failed for presentation %s: %s", presentation_id, exc)
+    logger.exception("Generate task failed: task_id=%s: %s", presentation.task_id, exc)
     Presentation.objects.filter(id=presentation_id).update(retry_count=F("retry_count") + 1)
     retry_count = Presentation.objects.get(id=presentation_id).retry_count
     max_retries = 3
 
     if retry_count < max_retries:
-        logger.info("Retrying presentation %s (attempt %d/%d)", presentation_id, retry_count, max_retries)
+        logger.info("Retrying task_id=%s (attempt %d/%d)", presentation.task_id, retry_count, max_retries)
         # Set back to pending — the outbox relay will re-dispatch.
         Presentation.objects.filter(id=presentation_id).update(
             status="pending", files=[], processing_since=None
@@ -89,7 +89,7 @@ def _handle_task_failure(
             )
         )
     else:
-        logger.error("Presentation %s failed after %d attempts", presentation_id, retry_count)
+        logger.error("task_id=%s failed after %d attempts", presentation.task_id, retry_count)
         Presentation.objects.filter(id=presentation_id).update(status="failed")
         _log_event(presentation, kind="error", message=str(exc), stage="failed", percent=0)
         asyncio.run(
@@ -113,12 +113,13 @@ def generate_presentation_task(presentation_id: str) -> None:
     sokratic_logger.setLevel(logging.DEBUG)
     sokratic_logger.propagate = True
 
-    logger.info("Generate task started for presentation %s", presentation_id)
     try:
         presentation = Presentation.objects.get(id=presentation_id)
     except Presentation.DoesNotExist:
-        logger.error("Presentation %s does not exist", presentation_id)
+        logger.error("Presentation id=%s does not exist", presentation_id)
         return
+    task_id = presentation.task_id or str(presentation_id)
+    logger.info("Generate task started: task_id=%s", task_id)
 
     # Atomically claim the task: only proceed if status is still 'pending'.
     # This prevents double-execution when the relay dispatches duplicates.
@@ -127,7 +128,7 @@ def generate_presentation_task(presentation_id: str) -> None:
     ).update(status="processing", processing_since=timezone.now())
     if not claimed:
         logger.info(
-            "Presentation %s already claimed or finished, skipping.", presentation_id
+            "task_id=%s already claimed or finished, skipping.", task_id
         )
         return
     _log_event(
@@ -154,7 +155,7 @@ def generate_presentation_task(presentation_id: str) -> None:
         generation_id = presentation.task_id or str(presentation.id)
         generation_dir = os.path.join(settings.PRESENTATIONS_ASSETS_DIR, generation_id)
         apw = await async_playwright().start()
-        logger.info("Playwright started for presentation %s", presentation_id)
+        logger.info("Playwright started: task_id=%s", generation_id)
         source = SokraticSource(
             apw,
             logger=sokratic_logger,
@@ -172,9 +173,9 @@ def generate_presentation_task(presentation_id: str) -> None:
         try:
             headless = settings.PRESENTATIONS_HEADLESS
             logger.info(
-                "Starting browser in %s mode for presentation %s",
+                "Starting browser in %s mode: task_id=%s",
                 "headless" if headless else "headed",
-                presentation_id,
+                generation_id,
             )
 
             await source.init_async(headless=headless)
@@ -185,7 +186,7 @@ def generate_presentation_task(presentation_id: str) -> None:
                 raise RuntimeError("SOKRATIC_USERNAME/SOKRATIC_PASSWORD are not set")
 
             logger.info(
-                "Authenticating SokraticSource for presentation %s", presentation_id
+                "Authenticating SokraticSource: task_id=%s", generation_id
             )
             await source.authenticate(
                 login=login,
@@ -235,8 +236,8 @@ def generate_presentation_task(presentation_id: str) -> None:
                 )
                 if payload.get("stage"):
                     logger.info(
-                        "Progress %s: stage=%s percent=%s",
-                        presentation_id,
+                        "Progress task_id=%s: stage=%s percent=%s",
+                        generation_id,
                         payload.get("stage"),
                         payload.get("percent"),
                     )
@@ -244,9 +245,9 @@ def generate_presentation_task(presentation_id: str) -> None:
                 if update.get("stage") == "done":
                     files = _safe_files(update.get("files"))
         finally:
-            logger.info("Disposing source for presentation %s", presentation_id)
+            logger.info("Disposing source: task_id=%s", generation_id)
             await source.dispose_async()
-            logger.info("Stopping Playwright for presentation %s", presentation_id)
+            logger.info("Stopping Playwright: task_id=%s", generation_id)
             await apw.stop()
 
         return files
@@ -254,8 +255,8 @@ def generate_presentation_task(presentation_id: str) -> None:
     try:
         files = asyncio.run(_run())
         logger.info(
-            "Generate task completed for presentation %s (files=%d)",
-            presentation_id,
+            "Generate task completed: task_id=%s (files=%d)",
+            task_id,
             len(files),
         )
         Presentation.objects.filter(id=presentation_id).update(
