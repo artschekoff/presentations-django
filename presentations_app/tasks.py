@@ -151,12 +151,14 @@ def generate_presentation_task(presentation_id: str) -> None:
 
     async def _run() -> list[str]:
         files: list[str] = []
+        generation_id = presentation.task_id or str(presentation.id)
+        generation_dir = os.path.join(settings.PRESENTATIONS_ASSETS_DIR, generation_id)
         apw = await async_playwright().start()
         logger.info("Playwright started for presentation %s", presentation_id)
         source = SokraticSource(
             apw,
             logger=sokratic_logger,
-            assets_dir=settings.PRESENTATIONS_ASSETS_DIR,
+            generation_dir=generation_dir,
             generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
             playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
             save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
@@ -182,30 +184,29 @@ def generate_presentation_task(presentation_id: str) -> None:
             if not login or not password:
                 raise RuntimeError("SOKRATIC_USERNAME/SOKRATIC_PASSWORD are not set")
 
-            generation_id = presentation.task_id or str(presentation.id)
-
             logger.info(
                 "Authenticating SokraticSource for presentation %s", presentation_id
             )
             await source.authenticate(
                 login=login,
                 password=password,
-                generation_dir=generation_id,
+                generation_id=generation_id,
             )
 
             async for update in source.generate_presentation(
+                generation_id=generation_id,
                 topic=presentation.topic,
                 language=presentation.language,
                 slides_amount=presentation.slides_amount,
                 grade=str(presentation.grade),
                 subject=presentation.subject,
                 author=presentation.author,
+                style_id=str(presentation.template) if presentation.template is not None else None,
                 formats_to_download=[
                     DownloadFormat.POWERPOINT,
                     DownloadFormat.PDF,
                     DownloadFormat.TEXT,
                 ],
-                generation_id=generation_id,
             ):
                 payload: dict[str, Any] = dict(update)
                 payload["presentation_id"] = presentation_id
