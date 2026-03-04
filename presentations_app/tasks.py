@@ -160,6 +160,7 @@ def generate_presentation_task(presentation_id: str) -> None:
             generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
             playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
             save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
+            save_logs=settings.PRESENTATIONS_SAVE_LOGS,
             site_throttle_delay_ms=settings.PRESENTATIONS_SITE_THROTTLE_DELAY_MS,
             storage=build_s3_storage_if_configured(),
         )
