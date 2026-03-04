@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 import secrets
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
 
 
 class Presentation(models.Model):
@@ -54,7 +54,11 @@ class PresentationLog(models.Model):
 class UserToken(models.Model):
     """API token for authenticated users."""
 
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="api_token")
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="api_token",
+    )
     token = models.CharField(max_length=64, unique=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

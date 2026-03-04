@@ -11,7 +11,7 @@ from asgiref.sync import sync_to_async
 from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from django.urls import reverse
@@ -20,6 +20,7 @@ from playwright.async_api import async_playwright
 from presentations_module import SokraticSource, DownloadFormat
 
 from .models import Presentation, PresentationLog
+from .s3 import build_s3_storage_if_configured
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,7 @@ def generate_presentation_task(presentation_id: str) -> None:
             playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
             save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
             site_throttle_delay_ms=settings.PRESENTATIONS_SITE_THROTTLE_DELAY_MS,
+            storage=build_s3_storage_if_configured(),
         )
         if not hasattr(source, "browser"):
             source.browser = None
@@ -192,7 +194,11 @@ def generate_presentation_task(presentation_id: str) -> None:
                 grade=str(presentation.grade),
                 subject=presentation.subject,
                 author=presentation.author,
-                formats_to_download=[DownloadFormat.POWERPOINT, DownloadFormat.TEXT],
+                formats_to_download=[
+                    DownloadFormat.POWERPOINT,
+                    DownloadFormat.PDF,
+                    DownloadFormat.TEXT,
+                ],
                 generation_id=generation_id,
             ):
                 payload: dict[str, Any] = dict(update)
@@ -285,29 +291,18 @@ def generate_presentation_task(presentation_id: str) -> None:
 
 @shared_task
 def dispatch_pending_presentations() -> None:
-    """Outbox relay: dispatch pending presentations and recover stuck ones.
+    """Outbox relay: reset stuck presentations and dispatch pending ones.
 
-    Runs on a Celery Beat schedule (CELERY_BEAT_SCHEDULE).
-    Default interval: 30 minutes (1800 seconds), configurable via PRESENTATIONS_DISPATCH_INTERVAL_S env var.
-
-    Two things happen each tick:
-    1. Pending — any presentation with status='pending' is dispatched to Celery.
-       The actual task uses an atomic UPDATE WHERE status='pending' to claim work,
-       so duplicate dispatches are safe.
-    2. Stuck — any presentation with status='processing' whose processing_since
-       is older than the generation timeout is reset to 'pending' so it will be
-       re-dispatched on the next tick.
+    Runs every minute (configurable via PRESENTATIONS_DISPATCH_INTERVAL_S).
+    Uses atomic UPDATE WHERE status='pending' to claim work, so duplicate
+    dispatches are safe.
     """
     try:
-        # --- recover stuck processing tasks ---
-        timeout_s = settings.PRESENTATIONS_GENERATION_TIMEOUT_MS / 1000
-        stuck_cutoff = timezone.now() - timezone.timedelta(seconds=timeout_s)
-
-        from django.db.models import Count
-        status_counts = (
-            Presentation.objects.values("status").annotate(n=Count("id"))
-        )
+        status_counts = Presentation.objects.values("status").annotate(n=Count("id"))
         logger.info("Outbox relay DB snapshot: %s", {r["status"]: r["n"] for r in status_counts})
+
+        # --- recover stuck processing tasks (lease > 30 min) ---
+        stuck_cutoff = timezone.now() - timezone.timedelta(seconds=settings.PRESENTATIONS_LEASE_TIMEOUT_S)
         stuck_ids = list(
             Presentation.objects.filter(
                 Q(status="processing", processing_since__lt=stuck_cutoff)
@@ -315,9 +310,7 @@ def dispatch_pending_presentations() -> None:
             ).values_list("id", flat=True)
         )
         if stuck_ids:
-            logger.warning(
-                "Outbox relay: resetting %d stuck presentation(s) to pending.", len(stuck_ids)
-            )
+            logger.warning("Outbox relay: resetting %d stuck presentation(s) to pending.", len(stuck_ids))
             Presentation.objects.filter(id__in=stuck_ids).update(
                 status="pending", processing_since=None
             )

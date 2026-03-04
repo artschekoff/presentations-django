@@ -156,7 +156,7 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
     "dispatch-pending-presentations": {
         "task": "presentations_app.tasks.dispatch_pending_presentations",
-        "schedule": _int_env("PRESENTATIONS_DISPATCH_INTERVAL_S", 1800),  # 30 minutes
+        "schedule": _int_env("PRESENTATIONS_DISPATCH_INTERVAL_S", 60),  # 1 minute
     },
 }
 
@@ -179,6 +179,16 @@ PLAYWRIGHT_DEFAULT_TIMEOUT_MS = _int_env(
 PRESENTATIONS_SAVE_SCREENSHOTS = _bool_env("SAVE_SCREENSHOTS", True)
 PRESENTATIONS_HEADLESS = _bool_env("PRESENTATIONS_HEADLESS", True)
 PRESENTATIONS_SITE_THROTTLE_DELAY_MS = _int_env("SITE_THROTTLE_DELAY_MS", 5000)
+PRESENTATIONS_LEASE_TIMEOUT_S = _int_env("PRESENTATIONS_LEASE_TIMEOUT_S", 1800)
+
+S3_BUCKET = _read_env("S3_BUCKET")
+S3_PREFIX = _read_env("S3_PREFIX", "")
+S3_REGION = _read_env("S3_REGION")
+S3_ENDPOINT_URL = _read_env("S3_ENDPOINT_URL")
+S3_ACCESS_KEY_ID = _read_env("AWS_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = _read_env("AWS_SECRET_ACCESS_KEY")
+S3_VERIFY_SSL = _bool_env("S3_VERIFY_SSL", True)
+S3_PRESIGN_EXPIRY = _int_env("S3_PRESIGN_EXPIRY", 3600)
 
 CHANNEL_REDIS_URL = _read_env("CHANNEL_REDIS_URL", CELERY_BROKER_URL)
 CHANNEL_LAYERS = {

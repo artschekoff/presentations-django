@@ -9,16 +9,17 @@ from functools import wraps
 import os
 import mimetypes
 
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.views import View
 from django.utils.decorators import method_decorator
+from django.conf import settings
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
-from django.contrib.auth.decorators import login_required
 
 from .dto import CreatePresentationCommandDto
 from .models import Presentation, UserToken
+from .s3 import build_s3_storage
 from .services import PresentationService
 
 
@@ -31,15 +32,15 @@ def _require_api_token(view_func):
     @wraps(view_func)
     def wrapper(request: HttpRequest, *args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
-        
+
         # Check Bearer token
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]  # Remove "Bearer " prefix
-            
+
             # Check static API token
             if API_TOKEN and token == API_TOKEN:
                 return view_func(request, *args, **kwargs)
-            
+
             # Check user token
             try:
                 user_token = UserToken.objects.get(token=token)
@@ -47,9 +48,16 @@ def _require_api_token(view_func):
                 return view_func(request, *args, **kwargs)
             except UserToken.DoesNotExist:
                 return JsonResponse({"detail": "Invalid API token"}, status=403)
-        
+
         return JsonResponse({"detail": "Missing or invalid Authorization header"}, status=401)
     return wrapper
+
+
+def _s3_presigned_redirect(s3_uri: str) -> HttpResponseRedirect:
+    """Generate a presigned S3 URL and redirect to it."""
+    storage = build_s3_storage()
+    url = storage.s3_presigned_redirect(s3_uri, expires_in=settings.S3_PRESIGN_EXPIRY)
+    return HttpResponseRedirect(url)
 
 
 def _download_headers(file_path: str) -> dict[str, str]:
@@ -103,20 +111,19 @@ class LoginView(View):
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any):
         username = request.POST.get("username", "")
         password = request.POST.get("password", "")
-        
+
         user = authenticate(request, username=username, password=password)
         if user is not None:
             django_login(request, user)
             # Generate or get token for user
             UserToken.objects.get_or_create(user=user)
             return redirect("presentation-form")
-        else:
-            return render(
-                request,
-                "presentations_app/login.html",
-                {"error": "Invalid username or password"},
-                status=401,
-            )
+        return render(
+            request,
+            "presentations_app/login.html",
+            {"error": "Invalid username or password"},
+            status=401,
+        )
 
 
 class LogoutView(View):
@@ -347,7 +354,11 @@ class PresentationDownloadView(View):
             (path for path in presentation.files if path.lower().endswith(".pptx")),
             None,
         )
-        if not pptx_path or not os.path.exists(pptx_path):
+        if not pptx_path:
+            raise Http404("Presentation file not found")
+        if pptx_path.startswith("s3://"):
+            return HttpResponse(status=200)
+        if not os.path.exists(pptx_path):
             raise Http404("Presentation file not found")
         return _head_download_response(pptx_path)
 
@@ -357,7 +368,11 @@ class PresentationDownloadView(View):
             (path for path in presentation.files if path.lower().endswith(".pptx")),
             None,
         )
-        if not pptx_path or not os.path.exists(pptx_path):
+        if not pptx_path:
+            raise Http404("Presentation file not found")
+        if pptx_path.startswith("s3://"):
+            return _s3_presigned_redirect(pptx_path)
+        if not os.path.exists(pptx_path):
             raise Http404("Presentation file not found")
         return _file_download_response(pptx_path)
 
@@ -378,7 +393,11 @@ class PresentationFileDownloadView(View):
             file_path = presentation.files[int(file_index)]
         except (IndexError, ValueError, TypeError) as exc:
             raise Http404("File not found") from exc
-        if not file_path or not os.path.exists(file_path):
+        if not file_path:
+            raise Http404("File not found")
+        if file_path.startswith("s3://"):
+            return HttpResponse(status=200)
+        if not os.path.exists(file_path):
             raise Http404("File not found")
         return _head_download_response(file_path)
 
@@ -395,6 +414,10 @@ class PresentationFileDownloadView(View):
             file_path = presentation.files[int(file_index)]
         except (IndexError, ValueError, TypeError) as exc:
             raise Http404("File not found") from exc
-        if not file_path or not os.path.exists(file_path):
+        if not file_path:
+            raise Http404("File not found")
+        if file_path.startswith("s3://"):
+            return _s3_presigned_redirect(file_path)
+        if not os.path.exists(file_path):
             raise Http404("File not found")
         return _file_download_response(file_path)

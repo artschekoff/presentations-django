@@ -28,4 +28,3 @@ class UserTokenAdmin(admin.ModelAdmin):
     list_filter = ("created_at",)
     search_fields = ("user__username", "token")
     readonly_fields = ("token", "created_at")
-

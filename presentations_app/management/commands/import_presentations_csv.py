@@ -28,7 +28,7 @@ class Command(BaseCommand):
             help="Parse and validate without writing to the database",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args, **options):  # pylint: disable=too-many-locals
         csv_path = options["csv_file"]
         dry_run = options["dry_run"]
 
@@ -69,7 +69,7 @@ class Command(BaseCommand):
                 continue
 
             try:
-                command = _parse_row(row, line_no)
+                command = _parse_row(row)
             except ValueError as exc:
                 self.stderr.write(f"  line {line_no}: validation error — {exc}")
                 errors += 1
@@ -93,7 +93,7 @@ class Command(BaseCommand):
             sys.exit(1)
 
 
-def _parse_row(row: dict, line_no: int) -> CreatePresentationCommandDto:
+def _parse_row(row: dict) -> CreatePresentationCommandDto:  # pylint: disable=too-many-branches
     topic = row.get("topic", "").strip()
     if not topic:
         raise ValueError("topic is required")
@@ -104,15 +104,15 @@ def _parse_row(row: dict, line_no: int) -> CreatePresentationCommandDto:
 
     try:
         slides_amount = int(row.get("slides_amount") or 20)
-    except (TypeError, ValueError):
-        raise ValueError("slides_amount must be an integer")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("slides_amount must be an integer") from exc
     if slides_amount < 0:
         raise ValueError("slides_amount must be non-negative")
 
     try:
         grade = int(row.get("grade") or 0)
-    except (TypeError, ValueError):
-        raise ValueError("grade must be an integer")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("grade must be an integer") from exc
     if grade < 1 or grade > 11:
         raise ValueError("grade must be between 1 and 11")
 
@@ -127,8 +127,8 @@ def _parse_row(row: dict, line_no: int) -> CreatePresentationCommandDto:
     if book_id_raw:
         try:
             book_id = int(book_id_raw)
-        except (TypeError, ValueError):
-            raise ValueError("book_id must be an integer")
+        except (TypeError, ValueError) as exc:
+            raise ValueError("book_id must be an integer") from exc
     else:
         book_id = None
 
@@ -136,8 +136,8 @@ def _parse_row(row: dict, line_no: int) -> CreatePresentationCommandDto:
     if template_raw:
         try:
             template = int(template_raw)
-        except (TypeError, ValueError):
-            raise ValueError("template must be an integer")
+        except (TypeError, ValueError) as exc:
+            raise ValueError("template must be an integer") from exc
     else:
         template = None
 
