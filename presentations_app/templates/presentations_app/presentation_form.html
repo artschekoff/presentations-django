@@ -116,6 +116,36 @@
         transform: none;
       }
 
+      button.is-loading {
+        position: relative;
+        pointer-events: none;
+      }
+
+      button.is-loading::after {
+        content: "";
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(255, 255, 255, 0.7);
+        border-top-color: transparent;
+        border-radius: 50%;
+        display: inline-block;
+        margin-left: 8px;
+        vertical-align: middle;
+        animation: spin 0.8s linear infinite;
+      }
+
+      .btn-outline.is-loading::after,
+      .btn-restart.is-loading::after {
+        border-color: rgba(47, 111, 237, 0.55);
+        border-top-color: transparent;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       .btn-outline {
         background: #fff;
         color: var(--accent);
@@ -557,6 +587,10 @@
       const API_TOKEN = "{{ api_token }}".trim();
       const sockets = new Map();
       const tasksEl = document.getElementById("tasks");
+      const btnManual = document.getElementById("btn-manual");
+      const btnCsv = document.getElementById("btn-csv");
+      const btnLoadActive = document.getElementById("btn-load-active");
+      let activeBackendOperations = 0;
 
       function getAuthHeaders() {
         const headers = {};
@@ -587,6 +621,45 @@
         });
 
         return response;
+      }
+
+      function syncModeButtonsState() {
+        const shouldDisable = activeBackendOperations > 0;
+        if (btnManual) btnManual.disabled = shouldDisable;
+        if (btnCsv) btnCsv.disabled = shouldDisable;
+        if (btnLoadActive) btnLoadActive.disabled = shouldDisable;
+      }
+
+      function startButtonLoading(button, text) {
+        if (!button) return;
+        if (button.dataset.loadingActive === "1") return;
+        button.dataset.loadingActive = "1";
+        activeBackendOperations += 1;
+        syncModeButtonsState();
+        if (!button.dataset.originalText) {
+          button.dataset.originalText = button.textContent;
+        }
+        if (text) {
+          button.textContent = text;
+        }
+        button.disabled = true;
+        button.classList.add("is-loading");
+      }
+
+      function stopButtonLoading(button, { restoreText = true, text = null, disabled = false } = {}) {
+        if (!button) return;
+        if (button.dataset.loadingActive === "1") {
+          button.dataset.loadingActive = "0";
+          activeBackendOperations = Math.max(0, activeBackendOperations - 1);
+          syncModeButtonsState();
+        }
+        button.classList.remove("is-loading");
+        if (text !== null) {
+          button.textContent = text;
+        } else if (restoreText && button.dataset.originalText) {
+          button.textContent = button.dataset.originalText;
+        }
+        button.disabled = disabled;
       }
 
       function formatTitle(payload) {
@@ -679,8 +752,7 @@
         restartBtn.className = "btn-restart";
         restartBtn.textContent = "↺ Перезапустить";
         restartBtn.addEventListener("click", async () => {
-          restartBtn.disabled = true;
-          restartBtn.textContent = "Запускаю…";
+          startButtonLoading(restartBtn, "Запускаю…");
           try {
             const resp = await apiFetch(`/api/presentations/${task.id}/restart/`, { 
               method: "POST"
@@ -703,8 +775,7 @@
             sockets.delete(task.id);
             connectSocket(task.id, { row, status, progressFill, links, actions: actionsEl });
           } catch (err) {
-            restartBtn.disabled = false;
-            restartBtn.textContent = "↺ Перезапустить";
+            stopButtonLoading(restartBtn, { text: "↺ Перезапустить", disabled: false, restoreText: false });
             alert(`Ошибка перезапуска: ${err.message}`);
           }
         });
@@ -762,14 +833,14 @@
 
       // --- Load active tasks ---
       async function loadActiveTasks() {
-        const btn = document.getElementById("btn-load-active");
-        if (btn) { btn.disabled = true; btn.textContent = "Загружаю…"; }
+        const btn = btnLoadActive;
+        startButtonLoading(btn, "Загружаю…");
         let added = 0;
         try {
           const resp = await apiFetch("/api/presentations/active/?limit=200");
           if (!resp.ok) {
             alert(`Ошибка загрузки активных задач: ${resp.status} ${resp.statusText}`);
-            if (btn) { btn.disabled = false; btn.textContent = "Загрузить активные задачи"; }
+            stopButtonLoading(btn, { text: "Загрузить активные задачи", disabled: false, restoreText: false });
             return;
           }
           const tasks = await resp.json();
@@ -784,27 +855,28 @@
             added++;
           });
           if (btn) {
-            btn.disabled = false;
-            btn.textContent = added > 0
-              ? `Загружено ${added} задач — обновить`
-              : "Нет новых активных задач";
+            stopButtonLoading(btn, {
+              text: added > 0 ? `Загружено ${added} задач — обновить` : "Нет новых активных задач",
+              disabled: false,
+              restoreText: false,
+            });
           }
         } catch (err) {
           alert(`Ошибка загрузки активных задач: ${err.message}`);
-          if (btn) { btn.disabled = false; btn.textContent = "Загрузить активные задачи"; }
+          stopButtonLoading(btn, { text: "Загрузить активные задачи", disabled: false, restoreText: false });
         }
       }
 
-      document.getElementById("btn-load-active").addEventListener("click", loadActiveTasks);
+      btnLoadActive.addEventListener("click", loadActiveTasks);
       loadActiveTasks();
 
       // --- Mode selection ---
-      document.getElementById("btn-manual").addEventListener("click", () => {
+      btnManual.addEventListener("click", () => {
         document.getElementById("mode-selection").classList.add("hidden");
         document.getElementById("manual-section").classList.remove("hidden");
       });
 
-      document.getElementById("btn-csv").addEventListener("click", () => {
+      btnCsv.addEventListener("click", () => {
         document.getElementById("mode-selection").classList.add("hidden");
         document.getElementById("csv-section").classList.remove("hidden");
       });
@@ -818,7 +890,7 @@
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        submitBtn.disabled = true;
+        startButtonLoading(submitBtn, "Запускаю…");
         manualError.textContent = "";
 
         const payload = {
@@ -847,7 +919,7 @@
           form.classList.add("hidden");
           addTaskWrap.classList.remove("hidden");
         } catch (err) {
-          submitBtn.disabled = false;
+          stopButtonLoading(submitBtn, { disabled: false });
           manualError.textContent = err.message || "Не удалось запустить генерацию";
         }
       });
@@ -856,7 +928,7 @@
         form.reset();
         form.classList.remove("hidden");
         addTaskWrap.classList.add("hidden");
-        submitBtn.disabled = false;
+        stopButtonLoading(submitBtn, { disabled: false });
       });
 
       // --- CSV mode ---
@@ -1028,39 +1100,51 @@
           return;
         }
 
+        startButtonLoading(btnVerify, "Проверяю…");
+        btnQueue.disabled = true;
+
         const reader = new FileReader();
         reader.onload = async (e) => {
-          const { errors, rows } = parseCsv(e.target.result);
-
-          if (errors.length > 0 || rows.length === 0) {
-            renderFeedback({ errors, rows });
-            validatedRows = [];
-            btnQueue.disabled = true;
-            return;
-          }
-
-          // Check which task_ids already exist in the DB.
-          let existingSet = new Set();
           try {
-            const resp = await apiFetch("/api/presentations/check-task-ids/", {
-              method: "POST",
-              body: JSON.stringify({ task_ids: rows.map((r) => r.task_id).filter(Boolean) }),
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              existingSet = new Set(data.existing || []);
+            const { errors, rows } = parseCsv(e.target.result);
+
+            if (errors.length > 0 || rows.length === 0) {
+              renderFeedback({ errors, rows });
+              validatedRows = [];
+              btnQueue.disabled = true;
+              return;
             }
-          } catch (err) {
-            console.warn("Failed to check existing task_ids:", err);
-            // If the check fails, proceed with all rows (server will deduplicate anyway).
+
+            // Check which task_ids already exist in the DB.
+            let existingSet = new Set();
+            try {
+              const resp = await apiFetch("/api/presentations/check-task-ids/", {
+                method: "POST",
+                body: JSON.stringify({ task_ids: rows.map((r) => r.task_id).filter(Boolean) }),
+              });
+              if (resp.ok) {
+                const data = await resp.json();
+                existingSet = new Set(data.existing || []);
+              }
+            } catch (err) {
+              console.warn("Failed to check existing task_ids:", err);
+              // If the check fails, proceed with all rows (server will deduplicate anyway).
+            }
+
+            const newRows = rows.filter((r) => !existingSet.has(r.task_id));
+            const skippedCount = rows.length - newRows.length;
+
+            validatedRows = newRows;
+            renderFeedback({ errors: [], rows: newRows, skippedCount });
+            btnQueue.disabled = newRows.length === 0;
+          } finally {
+            stopButtonLoading(btnVerify, { disabled: false });
           }
-
-          const newRows = rows.filter((r) => !existingSet.has(r.task_id));
-          const skippedCount = rows.length - newRows.length;
-
-          validatedRows = newRows;
-          renderFeedback({ errors: [], rows: newRows, skippedCount });
-          btnQueue.disabled = newRows.length === 0;
+        };
+        reader.onerror = () => {
+          stopButtonLoading(btnVerify, { disabled: false });
+          csvFeedback.innerHTML = '<div class="error" style="margin-top:8px">Ошибка чтения файла</div>';
+          btnQueue.disabled = true;
         };
         reader.readAsText(file, "UTF-8");
       });
@@ -1068,7 +1152,7 @@
       btnQueue.addEventListener("click", async () => {
         if (validatedRows.length === 0) return;
 
-        btnQueue.disabled = true;
+        startButtonLoading(btnQueue, "Добавляю…");
         btnVerify.disabled = true;
         queueError.textContent = "";
 
@@ -1114,10 +1198,10 @@
           queueError.textContent = skippedCount > 0 ? `Пропущено ${skippedCount} записей (уже существуют/дубликаты).` : "";
         } catch (err) {
           queueError.textContent = err?.message || "Неизвестная ошибка";
+        } finally {
+          stopButtonLoading(btnQueue, { disabled: false });
+          btnVerify.disabled = false;
         }
-
-        btnVerify.disabled = false;
-        btnQueue.disabled = false;
       });
     </script>
   </body>
