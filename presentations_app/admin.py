@@ -9,7 +9,7 @@ from .models import Presentation, PresentationLog, UserToken
 
 @admin.register(Presentation)
 class PresentationAdmin(admin.ModelAdmin):
-    list_display = ("topic", "language", "status", "created_at")
+    list_display = ("topic", "task_id", "language", "status", "created_at")
     list_filter = ("status", "language")
     search_fields = ("topic", "audience", "author")
 
