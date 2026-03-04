@@ -181,12 +181,17 @@ def generate_presentation_task(presentation_id: str) -> None:
             if not login or not password:
                 raise RuntimeError("SOKRATIC_USERNAME/SOKRATIC_PASSWORD are not set")
 
+            generation_id = presentation.task_id or str(presentation.id)
+
             logger.info(
                 "Authenticating SokraticSource for presentation %s", presentation_id
             )
-            await source.authenticate(login=login, password=password)
+            await source.authenticate(
+                login=login,
+                password=password,
+                generation_dir=generation_id,
+            )
 
-            generation_id = presentation.task_id or str(presentation.id)
             async for update in source.generate_presentation(
                 topic=presentation.topic,
                 language=presentation.language,
