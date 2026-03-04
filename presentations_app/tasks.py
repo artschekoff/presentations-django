@@ -153,7 +153,8 @@ def generate_presentation_task(presentation_id: str) -> None:
     async def _run() -> list[str]:
         files: list[str] = []
         generation_id = presentation.task_id or str(presentation.id)
-        generation_dir = os.path.join(settings.PRESENTATIONS_ASSETS_DIR, generation_id)
+        generation_dir = settings.PRESENTATIONS_ASSETS_DIR
+        storage = build_s3_storage_if_configured()
         apw = await async_playwright().start()
         logger.info("Playwright started: task_id=%s", generation_id)
         source = SokraticSource(
@@ -165,7 +166,7 @@ def generate_presentation_task(presentation_id: str) -> None:
             save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
             save_logs=settings.PRESENTATIONS_SAVE_LOGS,
             site_throttle_delay_ms=settings.PRESENTATIONS_SITE_THROTTLE_DELAY_MS,
-            storage=build_s3_storage_if_configured(),
+            storage=storage,
         )
         if not hasattr(source, "browser"):
             source.browser = None
