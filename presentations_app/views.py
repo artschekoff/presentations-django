@@ -261,6 +261,117 @@ class PresentationCreateView(View):
         )
 
 
+class PresentationBulkCreateView(View):
+    """Create multiple presentations in one request."""
+
+    @method_decorator(_require_api_token)
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({"detail": "Invalid JSON payload"}, status=400)
+
+        items = payload.get("items", [])
+        if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+            return JsonResponse({"detail": "items must be a list of objects"}, status=400)
+
+        try:
+            slides_amount = int(payload.get("slides_amount", 20))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "slides_amount must be an integer"}, status=400)
+        if slides_amount < 0:
+            return JsonResponse({"detail": "slides_amount must be non-negative"}, status=400)
+
+        commands: list[CreatePresentationCommandDto] = []
+        for item in items:
+            row_payload = dict(item)
+            row_payload["slides_amount"] = slides_amount
+            row_payload.setdefault("status", "pending")
+            row_payload.setdefault("files", [])
+
+            command, error = _validate_create_payload(row_payload)
+            if error is not None or command is None:
+                return JsonResponse({"detail": "Invalid row payload"}, status=400)
+
+            commands.append(command.with_status("pending"))
+
+        task_ids = [command.task_id for command in commands if command.task_id]
+        existing_by_task_id = {
+            presentation.task_id: presentation
+            for presentation in Presentation.objects.filter(task_id__in=task_ids)
+            if presentation.task_id
+        }
+
+        seen_new_task_ids: set[str] = set()
+        to_create: list[Presentation] = []
+        skipped: list[dict[str, Any]] = []
+
+        for command in commands:
+            if command.task_id:
+                if command.task_id in existing_by_task_id:
+                    existing = existing_by_task_id[command.task_id]
+                    skipped.append(
+                        {
+                            "id": str(existing.id),
+                            "task_id": existing.task_id,
+                            "topic": existing.topic,
+                            "reason": "already_exists",
+                        }
+                    )
+                    continue
+                if command.task_id in seen_new_task_ids:
+                    skipped.append(
+                        {
+                            "id": None,
+                            "task_id": command.task_id,
+                            "topic": command.topic,
+                            "reason": "duplicate_in_request",
+                        }
+                    )
+                    continue
+                seen_new_task_ids.add(command.task_id)
+
+            to_create.append(
+                Presentation(
+                    topic=command.topic,
+                    language=command.language,
+                    slides_amount=command.slides_amount,
+                    grade=command.grade,
+                    subject=command.subject,
+                    author=command.author,
+                    task_id=command.task_id,
+                    book_id=command.book_id,
+                    template=command.template,
+                    status=command.status,
+                    files=list(command.files),
+                )
+            )
+
+        created = Presentation.objects.bulk_create(to_create)
+
+        created_payload = [
+            {
+                "id": str(presentation.id),
+                "topic": presentation.topic,
+                "language": presentation.language,
+                "slides_amount": presentation.slides_amount,
+                "status": presentation.status,
+                "task_id": presentation.task_id,
+            }
+            for presentation in created
+        ]
+
+        return JsonResponse(
+            {
+                "created": created_payload,
+                "skipped": skipped,
+                "created_count": len(created_payload),
+                "skipped_count": len(skipped),
+            },
+            status=201,
+        )
+
+
 class PresentationCheckTaskIdsView(View):
     """Return which of the supplied task_ids already exist in the DB."""
 

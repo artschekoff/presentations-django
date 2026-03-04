@@ -1074,48 +1074,47 @@
 
         const slidesAmount = parseInt(csvSlidesAmount.value, 10);
 
-        const results = await Promise.allSettled(
-          validatedRows.map((row) =>
-            apiFetch("/api/presentations/", {
-              method: "POST",
-              body: JSON.stringify({
+        try {
+          const response = await apiFetch("/api/presentations/import/", {
+            method: "POST",
+            body: JSON.stringify({
+              slides_amount: slidesAmount,
+              items: validatedRows.map((row) => ({
                 topic: row.topic,
                 language: row.language,
-                slides_amount: slidesAmount,
                 grade: row.grade,
                 subject: row.subject,
                 author: null,
                 task_id: row.task_id,
                 book_id: row.book_id,
                 template: row.template,
-              }),
-            }).then(async (resp) => {
-              if (!resp.ok) {
-                const err = await resp.json();
-                throw new Error(err.detail || "Ошибка при создании");
-              }
-              return { row, data: await resp.json() };
-            })
-          )
-        );
+              })),
+            }),
+          });
 
-        const queueErrors = [];
-        results.forEach((result) => {
-          if (result.status === "fulfilled") {
-            const { row, data } = result.value;
-            const ui = createTaskRow({
-              topic: row.topic,
-              language: row.language,
-              slides_amount: slidesAmount,
-              id: data.id,
-            });
-            connectSocket(data.id, ui);
-          } else {
-            queueErrors.push(result.reason?.message || "Неизвестная ошибка");
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Ошибка при массовом создании");
           }
-        });
 
-        queueError.textContent = queueErrors.length > 0 ? queueErrors.join(", ") : "";
+          const result = await response.json();
+          const created = result.created || [];
+          const skippedCount = result.skipped_count || 0;
+
+          created.forEach((item) => {
+            const ui = createTaskRow({
+              topic: item.topic,
+              language: item.language,
+              slides_amount: item.slides_amount,
+              id: item.id,
+            });
+            connectSocket(item.id, ui);
+          });
+
+          queueError.textContent = skippedCount > 0 ? `Пропущено ${skippedCount} записей (уже существуют/дубликаты).` : "";
+        } catch (err) {
+          queueError.textContent = err?.message || "Неизвестная ошибка";
+        }
 
         btnVerify.disabled = false;
         btnQueue.disabled = false;
