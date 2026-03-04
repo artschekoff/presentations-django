@@ -10,6 +10,13 @@ RUN apt-get update \
         build-essential \
         supervisor \
         git \
+        fonts-dejavu \
+        fonts-liberation \
+        fonts-noto \
+        fonts-noto-cjk \
+        fonts-noto-color-emoji \
+        fontconfig \
+    && fc-cache -f -v \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
