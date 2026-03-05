@@ -153,7 +153,7 @@ def generate_presentation_task(presentation_id: str) -> None:
     async def _run() -> list[str]:
         files: list[str] = []
         generation_id = presentation.task_id or str(presentation.id)
-        generation_dir = settings.PRESENTATIONS_ASSETS_DIR
+        generation_dir = settings.PRESENTATIONS_DIR
         storage = build_s3_storage_if_configured()
         apw = await async_playwright().start()
         logger.info("Playwright started: task_id=%s", generation_id)
