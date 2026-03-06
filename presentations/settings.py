@@ -168,6 +168,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 PRESENTATIONS_DIR = _read_env("PRESENTATIONS_DIR", "")
+PRESENTATIONS_MAX_TABS = _int_env("PRESENTATIONS_MAX_TABS", 4)
 PRESENTATIONS_GENERATION_TIMEOUT_MS = _int_env(
     "PRESENTATIONS_GENERATION_TIMEOUT_MS",
     1200000,
@@ -233,6 +234,16 @@ LOGGING = {
         "presentations_module": {
             "handlers": ["console", "file"],
             "level": "DEBUG",
+            "propagate": False,
+        },
+        "daphne": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "daphne.ws_protocol": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
             "propagate": False,
         },
     },

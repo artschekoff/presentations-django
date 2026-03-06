@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Iterable
+import threading
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Iterable
 
 from asgiref.sync import sync_to_async
 from celery import shared_task
@@ -15,7 +17,7 @@ from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from django.urls import reverse
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Browser, Playwright
 
 from presentations_module import SokraticSource, DownloadFormat
 
@@ -23,6 +25,166 @@ from .models import Presentation, PresentationLog
 from .s3 import build_s3_storage_if_configured
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Shared browser pool
+# ---------------------------------------------------------------------------
+
+class _BrowserPool:
+    """Single Playwright browser shared across all Celery tasks.
+
+    Runs in a background daemon thread with its own persistent event loop.
+    An asyncio.Semaphore limits the number of concurrent browser contexts
+    (= tabs) to PRESENTATIONS_MAX_TABS.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._playwright: Playwright | None = None
+        self._browser: Browser | None = None
+        self._semaphore: asyncio.Semaphore | None = None
+        self._active_tabs = 0
+        self._active_tabs_lock: asyncio.Lock | None = None
+        self._init_error: Exception | None = None
+        self._ready = threading.Event()
+
+    # --- internal ---
+
+    def _loop_thread(self) -> None:
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        try:
+            self._loop.run_until_complete(self._init())
+        except Exception as exc:  # pragma: no cover
+            self._init_error = exc
+            logger.exception("BrowserPool: failed to initialize: %s", exc)
+        finally:
+            self._ready.set()
+        if self._init_error is not None:
+            return
+        self._loop.run_forever()
+
+    async def _init(self) -> None:
+        from django.conf import settings as _s
+        self._playwright = await async_playwright().start()
+        headless = _s.PRESENTATIONS_HEADLESS
+        self._browser = await self._playwright.chromium.launch(
+            headless=headless,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        max_tabs = _s.PRESENTATIONS_MAX_TABS
+        self._semaphore = asyncio.Semaphore(max_tabs)
+        self._active_tabs_lock = asyncio.Lock()
+        logger.info(
+            "BrowserPool: started (headless=%s, max_tabs=%d, worker_pid=%d, browser_id=%s)",
+            headless,
+            max_tabs,
+            os.getpid(),
+            hex(id(self._browser)),
+        )
+
+    # --- public ---
+
+    def _ensure_running(self) -> None:
+        need_wait = False
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                if self._ready.is_set():
+                    if self._init_error is not None:
+                        raise RuntimeError(
+                            f"BrowserPool: init failed: {self._init_error}"
+                        ) from self._init_error
+                    return
+                need_wait = True
+            else:
+                self._ready.clear()
+                self._init_error = None
+                self._thread = threading.Thread(
+                    target=self._loop_thread, daemon=True, name="browser-pool"
+                )
+                self._thread.start()
+                need_wait = True
+        if need_wait and not self._ready.wait(timeout=60):
+            raise RuntimeError("BrowserPool: browser did not start in time")
+        if self._init_error is not None:
+            raise RuntimeError(
+                f"BrowserPool: init failed: {self._init_error}"
+            ) from self._init_error
+
+    @property
+    def playwright(self) -> Playwright:
+        self._ensure_running()
+        assert self._playwright is not None
+        return self._playwright
+
+    @property
+    def browser(self) -> Browser:
+        self._ensure_running()
+        assert self._browser is not None
+        return self._browser
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        self._ensure_running()
+        if self._semaphore is None:
+            raise RuntimeError("BrowserPool: semaphore is not initialized")
+        return self._semaphore
+
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        self._ensure_running()
+        assert self._loop is not None
+        return self._loop
+
+    @property
+    def active_tabs(self) -> int:
+        self._ensure_running()
+        return self._active_tabs
+
+    @asynccontextmanager
+    async def tab_slot(self, task_id: str) -> AsyncIterator[None]:
+        self._ensure_running()
+        semaphore = self.semaphore
+        await semaphore.acquire()
+        assert self._active_tabs_lock is not None
+        async with self._active_tabs_lock:
+            self._active_tabs += 1
+            active_now = self._active_tabs
+        logger.info(
+            "Browser tab acquired: task_id=%s active_tabs=%d/%d worker_pid=%d browser_id=%s",
+            task_id,
+            active_now,
+            settings.PRESENTATIONS_MAX_TABS,
+            os.getpid(),
+            hex(id(self.browser)),
+        )
+        try:
+            yield
+        finally:
+            async with self._active_tabs_lock:
+                self._active_tabs -= 1
+                active_now = self._active_tabs
+            semaphore.release()
+            logger.info(
+                "Browser tab released: task_id=%s active_tabs=%d/%d worker_pid=%d browser_id=%s",
+                task_id,
+                active_now,
+                settings.PRESENTATIONS_MAX_TABS,
+                os.getpid(),
+                hex(id(self.browser)),
+            )
+
+    def run(self, coro: Any) -> Any:
+        """Submit *coro* to the shared event loop and block until it completes."""
+        self._ensure_running()
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+        return future.result()
+
+
+_browser_pool = _BrowserPool()
 
 
 async def _send_progress_async(presentation_id: str, payload: dict[str, Any]) -> None:
@@ -155,106 +317,113 @@ def generate_presentation_task(presentation_id: str) -> None:
         generation_id = presentation.task_id or str(presentation.id)
         generation_dir = settings.PRESENTATIONS_DIR
         storage = build_s3_storage_if_configured()
-        apw = await async_playwright().start()
-        logger.info("Playwright started: task_id=%s", generation_id)
-        source = SokraticSource(
-            apw,
-            logger=sokratic_logger,
-            generation_dir=generation_dir,
-            generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
-            playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
-            save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
-            save_logs=settings.PRESENTATIONS_SAVE_LOGS,
-            site_throttle_delay_ms=settings.PRESENTATIONS_SITE_THROTTLE_DELAY_MS,
-            storage=storage,
-        )
-        if not hasattr(source, "browser"):
-            source.browser = None
 
-        try:
-            headless = settings.PRESENTATIONS_HEADLESS
-            logger.info(
-                "Starting browser in %s mode: task_id=%s",
-                "headless" if headless else "headed",
-                generation_id,
+        logger.info("Waiting for browser tab: task_id=%s", generation_id)
+        async with _browser_pool.tab_slot(generation_id):
+            source = SokraticSource(
+                _browser_pool.playwright,
+                logger=sokratic_logger,
+                generation_dir=generation_dir,
+                generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
+                playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
+                save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
+                save_logs=settings.PRESENTATIONS_SAVE_LOGS,
+                site_throttle_delay_ms=settings.PRESENTATIONS_SITE_THROTTLE_DELAY_MS,
+                storage=storage,
             )
-
-            await source.init_async(headless=headless)
-
-            login = os.environ.get("SOKRATIC_USERNAME")
-            password = os.environ.get("SOKRATIC_PASSWORD")
-            if not login or not password:
-                raise RuntimeError("SOKRATIC_USERNAME/SOKRATIC_PASSWORD are not set")
-
-            logger.info(
-                "Authenticating SokraticSource: task_id=%s", generation_id
+            # Inject the shared browser so init_async is skipped.
+            # We create a fresh context (= isolated tab) per task instead.
+            source.browser = _browser_pool.browser
+            source.is_init = True
+            source.context = await _browser_pool.browser.new_context(
+                accept_downloads=True,
+                viewport={"width": 1280, "height": 720},
+                locale="ru-RU",
+                timezone_id="Europe/Moscow",
+                user_agent=(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
             )
-            await source.authenticate(
-                login=login,
-                password=password,
-                generation_id=generation_id,
-            )
+            source.page = await source.context.new_page()
+            if source.playwright_default_timeout is not None:
+                source.page.set_default_timeout(source.playwright_default_timeout)
 
-            async for update in source.generate_presentation(
-                generation_id=generation_id,
-                topic=presentation.topic,
-                language=presentation.language,
-                slides_amount=presentation.slides_amount,
-                grade=str(presentation.grade),
-                subject=presentation.subject,
-                author=presentation.author,
-                style_id=str(presentation.template) if presentation.template is not None else None,
-                formats_to_download=[
-                    DownloadFormat.POWERPOINT,
-                    DownloadFormat.PDF,
-                    DownloadFormat.TEXT,
-                ],
-            ):
-                payload: dict[str, Any] = dict(update)
-                payload["presentation_id"] = presentation_id
-                if payload.get("files"):
-                    files_now = _safe_files(payload.get("files"))
-                    await sync_to_async(
-                        Presentation.objects.filter(id=presentation_id).update
-                    )(files=files_now)
-                    payload["file_urls"] = [
-                        reverse(
-                            "presentation-file-download",
-                            kwargs={
-                                "presentation_id": presentation_id,
-                                "file_index": index,
-                            },
-                        )
-                        for index in range(len(files_now))
-                    ]
-                await _send_progress_async(presentation_id, payload)
-                await sync_to_async(_log_event)(
-                    presentation,
-                    kind="progress",
-                    payload=payload,
-                    stage=str(payload["stage"]) if "stage" in payload else None,
-                    percent=int(payload["percent"]) if "percent" in payload else None,
+            try:
+                login = os.environ.get("SOKRATIC_USERNAME")
+                password = os.environ.get("SOKRATIC_PASSWORD")
+                if not login or not password:
+                    raise RuntimeError("SOKRATIC_USERNAME/SOKRATIC_PASSWORD are not set")
+
+                logger.info("Authenticating SokraticSource: task_id=%s", generation_id)
+                await source.authenticate(
+                    login=login,
+                    password=password,
+                    generation_id=generation_id,
                 )
-                if payload.get("stage"):
-                    logger.info(
-                        "Progress task_id=%s: stage=%s percent=%s",
-                        generation_id,
-                        payload.get("stage"),
-                        payload.get("percent"),
-                    )
 
-                if update.get("stage") == "done":
-                    files = _safe_files(update.get("files"))
-        finally:
-            logger.info("Disposing source: task_id=%s", generation_id)
-            await source.dispose_async()
-            logger.info("Stopping Playwright: task_id=%s", generation_id)
-            await apw.stop()
+                async for update in source.generate_presentation(
+                    generation_id=generation_id,
+                    topic=presentation.topic,
+                    language=presentation.language,
+                    slides_amount=presentation.slides_amount,
+                    grade=str(presentation.grade),
+                    subject=presentation.subject,
+                    author=presentation.author,
+                    style_id=str(presentation.template) if presentation.template is not None else None,
+                    formats_to_download=[
+                        DownloadFormat.POWERPOINT,
+                        DownloadFormat.PDF,
+                        DownloadFormat.TEXT,
+                    ],
+                ):
+                    payload: dict[str, Any] = dict(update)
+                    payload["presentation_id"] = presentation_id
+                    if payload.get("files"):
+                        files_now = _safe_files(payload.get("files"))
+                        await sync_to_async(
+                            Presentation.objects.filter(id=presentation_id).update
+                        )(files=files_now)
+                        payload["file_urls"] = [
+                            reverse(
+                                "presentation-file-download",
+                                kwargs={
+                                    "presentation_id": presentation_id,
+                                    "file_index": index,
+                                },
+                            )
+                            for index in range(len(files_now))
+                        ]
+                    await _send_progress_async(presentation_id, payload)
+                    await sync_to_async(_log_event)(
+                        presentation,
+                        kind="progress",
+                        payload=payload,
+                        stage=str(payload["stage"]) if "stage" in payload else None,
+                        percent=int(payload["percent"]) if "percent" in payload else None,
+                    )
+                    if payload.get("stage"):
+                        logger.info(
+                            "Progress task_id=%s: stage=%s percent=%s",
+                            generation_id,
+                            payload.get("stage"),
+                            payload.get("percent"),
+                        )
+
+                    if update.get("stage") == "done":
+                        files = _safe_files(update.get("files"))
+            finally:
+                logger.info("Disposing context: task_id=%s", generation_id)
+                # Prevent dispose_async from closing the shared browser.
+                source.browser = None
+                await source.dispose_async()
+                logger.info("Context disposed: task_id=%s", generation_id)
 
         return files
 
     try:
-        files = asyncio.run(_run())
+        files = _browser_pool.run(_run())
         logger.info(
             "Generate task completed: task_id=%s (files=%d)",
             task_id,

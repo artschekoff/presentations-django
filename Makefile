@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .PHONY: help install migrate makemigrations run shell test run-all lint kill clean
 .PHONY: buildx-init build-amd64 build-amd64-push
 .PHONY: secretkey addmodule refresh-module
-.PHONY: sync-remote
+.PHONY: sync-remote s3-rm-png
 
 help:
 	@printf "install       Install dependencies from requirements.txt\n"
@@ -17,9 +17,11 @@ help:
 	@printf "buildx-init   Create and select buildx builder\n"
 	@printf "build-amd64   Build linux/amd64 image and load locally\n"
 	@printf "build-amd64-push Build linux/amd64 image and push to registry\n"
+	@printf "s3-rm-png     Remove all *.png files from S3 bucket using .env credentials\n"
 
 PYTHON ?= .venv/bin/python3
 CELERY_CONCURRENCY ?= 4
+CELERY_POOL ?= threads
 
 REGISTRY ?= ghcr.io/artschekoff
 IMAGE ?= presentations-django
@@ -72,17 +74,17 @@ kill:
 
 run-all:
 	@bash -c 'set -euo pipefail; \
-	$(PYTHON) -m celery -A presentations worker -l info --concurrency=$(CELERY_CONCURRENCY) & CELERY_PID=$$!; \
+	$(PYTHON) -m celery -A presentations worker -l info --pool=$(CELERY_POOL) --concurrency=$(CELERY_CONCURRENCY) & CELERY_PID=$$!; \
 	$(PYTHON) -m celery -A presentations beat -l info & BEAT_PID=$$!; \
-	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 presentations.asgi:application & DAPHNE_PID=$$!; \
+	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 --access-log /dev/null presentations.asgi:application & DAPHNE_PID=$$!; \
 	trap "kill $$DAPHNE_PID 2>/dev/null; kill $$BEAT_PID 2>/dev/null; kill $$CELERY_PID 2>/dev/null" EXIT; \
 	wait $$DAPHNE_PID'
 
 debug:
 	@DJANGO_DEBUG=1 bash -c 'set -euo pipefail; \
-	$(PYTHON) -m celery -A presentations worker -l debug --concurrency=1 & CELERY_PID=$$!; \
+	$(PYTHON) -m celery -A presentations worker -l debug --pool=$(CELERY_POOL) --concurrency=1 & CELERY_PID=$$!; \
 	$(PYTHON) -m celery -A presentations beat -l debug & BEAT_PID=$$!; \
-	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 presentations.asgi:application & DAPHNE_PID=$$!; \
+	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 --access-log /dev/null presentations.asgi:application & DAPHNE_PID=$$!; \
 	trap "kill $$DAPHNE_PID 2>/dev/null; kill $$BEAT_PID 2>/dev/null; kill $$CELERY_PID 2>/dev/null" EXIT; \
 	wait $$DAPHNE_PID'
 
@@ -108,6 +110,18 @@ build-amd64-push:
 sync-remote:
 	mkdir -p storage/remote
 	rsync -avz --progress trafficconnect:/home/techcode/gdz/storage/ storage/remote/
+
+s3-rm-png:
+	@bash -c 'set -euo pipefail; \
+	set -a; source .env; set +a; \
+	AWS_ACCESS_KEY_ID="$$AWS_ACCESS_KEY_ID" \
+	AWS_SECRET_ACCESS_KEY="$$AWS_SECRET_ACCESS_KEY" \
+	aws s3 rm s3://$${S3_BUCKET:-preza.kz}/ \
+	  --recursive \
+	  --exclude "*" \
+	  --include "*.png" \
+	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
+	  --no-verify-ssl'
 
 deploy:
 	wget -qO- https://docker.nftwitting.com/api/deploy/compose/eB6AM2XrQE5Gv_H501-xM
