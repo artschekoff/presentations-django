@@ -17,7 +17,13 @@ from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from django.urls import reverse
-from playwright.async_api import async_playwright, Browser, Playwright
+from playwright.async_api import (
+    async_playwright,
+    Browser,
+    BrowserContext,
+    Page,
+    Playwright,
+)
 
 from presentations_module import SokraticSource, DownloadFormat
 
@@ -45,6 +51,7 @@ class _BrowserPool:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
         self._semaphore: asyncio.Semaphore | None = None
         self._active_tabs = 0
         self._active_tabs_lock: asyncio.Lock | None = None
@@ -74,6 +81,17 @@ class _BrowserPool:
         self._browser = await self._playwright.chromium.launch(
             headless=headless,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        self._context = await self._browser.new_context(
+            accept_downloads=True,
+            viewport={"width": 1280, "height": 720},
+            locale="ru-RU",
+            timezone_id="Europe/Moscow",
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
         )
         max_tabs = _s.PRESENTATIONS_MAX_TABS
         self._semaphore = asyncio.Semaphore(max_tabs)
@@ -134,6 +152,13 @@ class _BrowserPool:
         return self._semaphore
 
     @property
+    def context(self) -> BrowserContext:
+        self._ensure_running()
+        if self._context is None:
+            raise RuntimeError("BrowserPool: context is not initialized")
+        return self._context
+
+    @property
     def loop(self) -> asyncio.AbstractEventLoop:
         self._ensure_running()
         assert self._loop is not None
@@ -182,6 +207,10 @@ class _BrowserPool:
         self._ensure_running()
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
         return future.result()
+
+    async def open_tab(self) -> Page:
+        self._ensure_running()
+        return await self.context.new_page()
 
 
 _browser_pool = _BrowserPool()
@@ -332,21 +361,11 @@ def generate_presentation_task(presentation_id: str) -> None:
                 storage=storage,
             )
             # Inject the shared browser so init_async is skipped.
-            # We create a fresh context (= isolated tab) per task instead.
+            # We create a fresh page (= tab) in one shared context per task.
             source.browser = _browser_pool.browser
             source.is_init = True
-            source.context = await _browser_pool.browser.new_context(
-                accept_downloads=True,
-                viewport={"width": 1280, "height": 720},
-                locale="ru-RU",
-                timezone_id="Europe/Moscow",
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-            )
-            source.page = await source.context.new_page()
+            source.context = _browser_pool.context
+            source.page = await _browser_pool.open_tab()
             if source.playwright_default_timeout is not None:
                 source.page.set_default_timeout(source.playwright_default_timeout)
 
@@ -415,8 +434,15 @@ def generate_presentation_task(presentation_id: str) -> None:
                         files = _safe_files(update.get("files"))
             finally:
                 logger.info("Disposing context: task_id=%s", generation_id)
-                # Prevent dispose_async from closing the shared browser.
+                # Prevent dispose_async from closing shared browser/context.
                 source.browser = None
+                if source.page is not None:
+                    try:
+                        await source.page.close()
+                    except Exception:
+                        logger.debug("Page already closed: task_id=%s", generation_id)
+                source.page = None
+                source.context = None
                 await source.dispose_async()
                 logger.info("Context disposed: task_id=%s", generation_id)
 
@@ -494,12 +520,30 @@ def dispatch_pending_presentations() -> None:
             )
 
         # --- dispatch all pending tasks ---
+        processing_count = Presentation.objects.filter(status="processing").count()
+        available_slots = max(settings.PRESENTATIONS_MAX_TABS - processing_count, 0)
+
+        if available_slots <= 0:
+            logger.info(
+                "Outbox relay: no free slots (processing=%d, max_tabs=%d).",
+                processing_count,
+                settings.PRESENTATIONS_MAX_TABS,
+            )
+            return
+
         pending_ids = list(
-            Presentation.objects.filter(status="pending").values_list("id", flat=True)
+            Presentation.objects.filter(status="pending")
+            .order_by("created_at")
+            .values_list("id", flat=True)[:available_slots]
         )
         for pres_id in pending_ids:
             generate_presentation_task.delay(str(pres_id))
         if pending_ids:
-            logger.info("Outbox relay dispatched %d presentation(s).", len(pending_ids))
+            logger.info(
+                "Outbox relay dispatched %d presentation(s) (processing=%d, max_tabs=%d).",
+                len(pending_ids),
+                processing_count,
+                settings.PRESENTATIONS_MAX_TABS,
+            )
     except Exception:
         logger.exception("Outbox relay failed")

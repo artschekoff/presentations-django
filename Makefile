@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .PHONY: help install migrate makemigrations run shell test run-all lint kill clean
 .PHONY: buildx-init build-amd64 build-amd64-push
 .PHONY: secretkey addmodule refresh-module
-.PHONY: sync-remote s3-rm-png
+.PHONY: sync-remote s3-rm-png s3-rm-all
 
 help:
 	@printf "install       Install dependencies from requirements.txt\n"
@@ -18,9 +18,10 @@ help:
 	@printf "build-amd64   Build linux/amd64 image and load locally\n"
 	@printf "build-amd64-push Build linux/amd64 image and push to registry\n"
 	@printf "s3-rm-png     Remove all *.png files from S3 bucket using .env credentials\n"
+	@printf "s3-rm-all     Remove all objects from S3 bucket using .env credentials\n"
 
 PYTHON ?= .venv/bin/python3
-CELERY_CONCURRENCY ?= 4
+CELERY_CONCURRENCY ?= 10
 CELERY_POOL ?= threads
 
 REGISTRY ?= ghcr.io/artschekoff
@@ -66,11 +67,31 @@ print('Done.')"
 	@echo "Clean complete."
 
 kill:
-	@lsof -ti :8000 | xargs kill -9 2>/dev/null || true
-	@pkill -f "celery.*presentations" 2>/dev/null || true
-	@pkill -f "daphne.*presentations" 2>/dev/null || true
-	@pkill -f "manage.py" 2>/dev/null || true
-	@echo "Done"
+	@bash -c 'set -euo pipefail; \
+	patterns=( \
+	  "celery -A presentations worker" \
+	  "celery -A presentations beat" \
+	  "daphne .*presentations\.asgi:application" \
+	  "manage.py runserver" \
+	); \
+	for pattern in "$${patterns[@]}"; do \
+	  pids=$$(pgrep -f "$$pattern" || true); \
+	  if [ -n "$$pids" ]; then \
+	    kill $$pids 2>/dev/null || true; \
+	  fi; \
+	done; \
+	sleep 1; \
+	for pattern in "$${patterns[@]}"; do \
+	  pids=$$(pgrep -f "$$pattern" || true); \
+	  if [ -n "$$pids" ]; then \
+	    kill -9 $$pids 2>/dev/null || true; \
+	  fi; \
+	done; \
+	pids=$$(lsof -ti tcp:8000 || true); \
+	if [ -n "$$pids" ]; then \
+	  kill -9 $$pids 2>/dev/null || true; \
+	fi; \
+	echo "Done"'
 
 run-all:
 	@bash -c 'set -euo pipefail; \
@@ -119,7 +140,17 @@ s3-rm-png:
 	aws s3 rm s3://$${S3_BUCKET:-preza.kz}/ \
 	  --recursive \
 	  --exclude "*" \
-	  --include "*.png" \
+	  --include "*.txt" \
+	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
+	  --no-verify-ssl'
+
+s3-rm-all:
+	@bash -c 'set -euo pipefail; \
+	set -a; source .env; set +a; \
+	AWS_ACCESS_KEY_ID="$$AWS_ACCESS_KEY_ID" \
+	AWS_SECRET_ACCESS_KEY="$$AWS_SECRET_ACCESS_KEY" \
+	aws s3 rm s3://$${S3_BUCKET:-preza.kz}/ \
+	  --recursive \
 	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
 	  --no-verify-ssl'
 
