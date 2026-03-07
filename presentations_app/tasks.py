@@ -55,6 +55,8 @@ class _BrowserPool:
         self._semaphore: asyncio.Semaphore | None = None
         self._active_tabs = 0
         self._active_tabs_lock: asyncio.Lock | None = None
+        self._auth_lock: asyncio.Lock | None = None
+        self._is_authenticated = False
         self._init_error: Exception | None = None
         self._ready = threading.Event()
 
@@ -96,6 +98,8 @@ class _BrowserPool:
         max_tabs = _s.PRESENTATIONS_MAX_TABS
         self._semaphore = asyncio.Semaphore(max_tabs)
         self._active_tabs_lock = asyncio.Lock()
+        self._auth_lock = asyncio.Lock()
+        self._is_authenticated = False
         logger.info(
             "BrowserPool: started (headless=%s, max_tabs=%d, worker_pid=%d, browser_id=%s)",
             headless,
@@ -211,6 +215,73 @@ class _BrowserPool:
     async def open_tab(self) -> Page:
         self._ensure_running()
         return await self.context.new_page()
+
+    async def ensure_authenticated(
+        self,
+        *,
+        generation_id: str,
+        logger_obj: logging.Logger,
+        storage: Any,
+    ) -> None:
+        self._ensure_running()
+        if self._is_authenticated:
+            return
+        if self._auth_lock is None:
+            raise RuntimeError("BrowserPool: auth lock is not initialized")
+
+        async with self._auth_lock:
+            if self._is_authenticated:
+                return
+
+            login = os.environ.get("SOKRATIC_USERNAME")
+            password = os.environ.get("SOKRATIC_PASSWORD")
+            if not login or not password:
+                raise RuntimeError("SOKRATIC_USERNAME/SOKRATIC_PASSWORD are not set")
+
+            logger.info(
+                "BrowserPool: opening auth tab (worker_pid=%d, browser_id=%s)",
+                os.getpid(),
+                hex(id(self.browser)),
+            )
+            auth_source = SokraticSource(
+                self.playwright,
+                logger=logger_obj,
+                generation_dir=settings.PRESENTATIONS_DIR,
+                generation_timeout=settings.PRESENTATIONS_GENERATION_TIMEOUT_MS,
+                playwright_default_timeout=settings.PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
+                save_screenshots=settings.PRESENTATIONS_SAVE_SCREENSHOTS,
+                save_logs=settings.PRESENTATIONS_SAVE_LOGS,
+                site_throttle_delay_ms=settings.PRESENTATIONS_SITE_THROTTLE_DELAY_MS,
+                storage=storage,
+            )
+            auth_source.browser = self.browser
+            auth_source.context = self.context
+            auth_source.is_init = True
+            auth_source.page = await self.open_tab()
+            if auth_source.playwright_default_timeout is not None:
+                auth_source.page.set_default_timeout(auth_source.playwright_default_timeout)
+
+            try:
+                await auth_source.authenticate(
+                    login=login,
+                    password=password,
+                    generation_id=f"auth-{generation_id}",
+                )
+                self._is_authenticated = True
+                logger.info(
+                    "BrowserPool: shared authentication completed (worker_pid=%d, browser_id=%s)",
+                    os.getpid(),
+                    hex(id(self.browser)),
+                )
+            finally:
+                if auth_source.page is not None:
+                    try:
+                        await auth_source.page.close()
+                    except Exception:
+                        logger.debug("BrowserPool: auth tab already closed")
+                auth_source.page = None
+                auth_source.context = None
+                auth_source.browser = None
 
 
 _browser_pool = _BrowserPool()
@@ -347,6 +418,12 @@ def generate_presentation_task(presentation_id: str) -> None:
         generation_dir = settings.PRESENTATIONS_DIR
         storage = build_s3_storage_if_configured()
 
+        await _browser_pool.ensure_authenticated(
+            generation_id=generation_id,
+            logger_obj=sokratic_logger,
+            storage=storage,
+        )
+
         logger.info("Waiting for browser tab: task_id=%s", generation_id)
         async with _browser_pool.tab_slot(generation_id):
             source = SokraticSource(
@@ -365,23 +442,9 @@ def generate_presentation_task(presentation_id: str) -> None:
             source.browser = _browser_pool.browser
             source.is_init = True
             source.context = _browser_pool.context
-            source.page = await _browser_pool.open_tab()
-            if source.playwright_default_timeout is not None:
-                source.page.set_default_timeout(source.playwright_default_timeout)
+            source.page = None
 
             try:
-                login = os.environ.get("SOKRATIC_USERNAME")
-                password = os.environ.get("SOKRATIC_PASSWORD")
-                if not login or not password:
-                    raise RuntimeError("SOKRATIC_USERNAME/SOKRATIC_PASSWORD are not set")
-
-                logger.info("Authenticating SokraticSource: task_id=%s", generation_id)
-                await source.authenticate(
-                    login=login,
-                    password=password,
-                    generation_id=generation_id,
-                )
-
                 async for update in source.generate_presentation(
                     generation_id=generation_id,
                     topic=presentation.topic,
@@ -436,11 +499,6 @@ def generate_presentation_task(presentation_id: str) -> None:
                 logger.info("Disposing context: task_id=%s", generation_id)
                 # Prevent dispose_async from closing shared browser/context.
                 source.browser = None
-                if source.page is not None:
-                    try:
-                        await source.page.close()
-                    except Exception:
-                        logger.debug("Page already closed: task_id=%s", generation_id)
                 source.page = None
                 source.context = None
                 await source.dispose_async()
