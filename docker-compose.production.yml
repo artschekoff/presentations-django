@@ -22,7 +22,6 @@ services:
   web:
     image: ghcr.io/artschekoff/presentations-django:latest
     pull_policy: always
-    build: .
     depends_on:
       - postgres
       - redis
