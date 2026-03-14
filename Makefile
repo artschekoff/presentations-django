@@ -4,6 +4,8 @@ SHELL := /bin/bash
 .PHONY: secretkey addmodule refresh-module
 .PHONY: sync-remote s3-rm-png s3-rm-all
 
+-include .env
+
 help:
 	@printf "install       Install dependencies from requirements.txt\n"
 	@printf "migrate       Apply migrations to the default database\n"
@@ -21,7 +23,7 @@ help:
 	@printf "s3-rm-all     Remove all objects from S3 bucket using .env credentials\n"
 
 PYTHON ?= .venv/bin/python3
-CELERY_CONCURRENCY ?= 10
+CELERY_CONCURRENCY ?= $(if $(PRESENTATIONS_MAX_TABS),$(PRESENTATIONS_MAX_TABS),10)
 CELERY_POOL ?= threads
 
 REGISTRY ?= ghcr.io/artschekoff
