@@ -13,5 +13,6 @@ build/
 node_modules/
 docker/data/
 storage/
-.env
+.env*
+!.env.example
 celerybeat-schedule*
