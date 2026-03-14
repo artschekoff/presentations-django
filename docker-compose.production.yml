@@ -1,6 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
+    pull_policy: always
     ports:
       - "6379:6379"
     networks:
@@ -8,6 +9,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    pull_policy: always
     # ports:
     # - "5533:5432"
     environment:
@@ -19,6 +21,7 @@ services:
 
   web:
     image: ghcr.io/artschekoff/presentations-django:latest
+    pull_policy: always
     build: .
     depends_on:
       - postgres
