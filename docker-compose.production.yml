@@ -10,8 +10,8 @@ services:
   postgres:
     image: postgres:16-alpine
     pull_policy: always
-    # ports:
-    # - "5533:5432"
+    ports:
+      - "5533:5432"
     environment:
       POSTGRES_DB: ${DJANGO_DB_NAME}
       POSTGRES_USER: ${DJANGO_DB_USER}
