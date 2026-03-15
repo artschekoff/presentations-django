@@ -24,6 +24,7 @@ from playwright.async_api import (
     Page,
     Playwright,
 )
+from playwright._impl._errors import TargetClosedError
 
 from presentations_module import SokraticSource, DownloadFormat
 
@@ -79,6 +80,15 @@ class _BrowserPool:
     async def _init(self) -> None:
         from django.conf import settings as _s
         self._playwright = await async_playwright().start()
+        max_tabs = _s.PRESENTATIONS_MAX_TABS
+        self._semaphore = asyncio.Semaphore(max_tabs)
+        self._active_tabs_lock = asyncio.Lock()
+        self._auth_lock = asyncio.Lock()
+        self._restart_lock = asyncio.Lock()
+        await self._launch_browser()
+
+    async def _launch_browser(self) -> None:
+        from django.conf import settings as _s
         headless = _s.PRESENTATIONS_HEADLESS
         self._browser = await self._playwright.chromium.launch(
             headless=headless,
@@ -95,18 +105,40 @@ class _BrowserPool:
                 "Chrome/120.0.0.0 Safari/537.36"
             ),
         )
-        max_tabs = _s.PRESENTATIONS_MAX_TABS
-        self._semaphore = asyncio.Semaphore(max_tabs)
-        self._active_tabs_lock = asyncio.Lock()
-        self._auth_lock = asyncio.Lock()
         self._is_authenticated = False
         logger.info(
             "BrowserPool: started (headless=%s, max_tabs=%d, worker_pid=%d, browser_id=%s)",
             headless,
-            max_tabs,
+            _s.PRESENTATIONS_MAX_TABS,
             os.getpid(),
             hex(id(self._browser)),
         )
+
+    async def _reinit_browser(self) -> None:
+        """Tear down dead browser and launch a fresh one."""
+        async with self._restart_lock:
+            if self._browser and self._browser.is_connected():
+                return
+            logger.warning(
+                "BrowserPool: browser died, restarting (worker_pid=%d)",
+                os.getpid(),
+            )
+            try:
+                if self._context:
+                    await self._context.close()
+            except Exception:
+                pass
+            try:
+                if self._browser:
+                    await self._browser.close()
+            except Exception:
+                pass
+            await self._launch_browser()
+            logger.info(
+                "BrowserPool: browser restarted (worker_pid=%d, browser_id=%s)",
+                os.getpid(),
+                hex(id(self._browser)),
+            )
 
     # --- public ---
 
@@ -135,6 +167,14 @@ class _BrowserPool:
             raise RuntimeError(
                 f"BrowserPool: init failed: {self._init_error}"
             ) from self._init_error
+
+    def restart_browser(self) -> None:
+        """Synchronously restart the browser from a Celery worker thread."""
+        self._ensure_running()
+        future = asyncio.run_coroutine_threadsafe(
+            self._reinit_browser(), self.loop
+        )
+        future.result(timeout=60)
 
     @property
     def playwright(self) -> Playwright:
@@ -546,6 +586,16 @@ def generate_presentation_task(presentation_id: str) -> None:
                 },
             )
         )
+    except TargetClosedError as exc:
+        logger.warning(
+            "Browser context died during task_id=%s, restarting browser pool",
+            task_id,
+        )
+        try:
+            _browser_pool.restart_browser()
+        except Exception:
+            logger.exception("Failed to restart browser pool")
+        _handle_task_failure(presentation, presentation_id, exc)
     # Intentional broad catch: task may fail for any reason (network, Playwright, API).
     except Exception as exc:  # pragma: no cover
         _handle_task_failure(presentation, presentation_id, exc)
