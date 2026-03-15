@@ -1,0 +1,59 @@
+services:
+  redis:
+    image: redis:7-alpine
+    pull_policy: always
+    #ports:
+    #  - "6379:6379"
+    networks:
+      - app-network
+
+  web:
+    image: ghcr.io/artschekoff/presentations-django:latest
+    pull_policy: always
+    depends_on:
+      - postgres
+      - redis
+    #ports:
+    #  - "8000:8000"
+    volumes:
+      - ./docker/data/storage:/home/techcode/gdz/web_storage
+    env_file:
+      - .env
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+      DJANGO_DB_ENGINE: ${DJANGO_DB_ENGINE}
+      DJANGO_DB_NAME: ${DJANGO_DB_NAME}
+      DJANGO_DB_USER: ${DJANGO_DB_USER}
+      DJANGO_DB_PASSWORD: ${DJANGO_DB_PASSWORD}
+      DJANGO_DB_HOST: ${DJANGO_DB_HOST}
+      DJANGO_DB_PORT: ${DJANGO_DB_PORT}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      CHANNEL_REDIS_URL: ${CHANNEL_REDIS_URL}
+      PRESENTATIONS_DIR: ${PRESENTATIONS_DIR}
+      PRESENTATIONS_MAX_TABS: ${PRESENTATIONS_MAX_TABS:-10}
+      PRESENTATIONS_HEADLESS: ${PRESENTATIONS_HEADLESS}
+      PRESENTATIONS_GENERATION_TIMEOUT_MS: ${PRESENTATIONS_GENERATION_TIMEOUT_MS}
+      PLAYWRIGHT_DEFAULT_TIMEOUT_MS: ${PLAYWRIGHT_DEFAULT_TIMEOUT_MS}
+      SITE_THROTTLE_DELAY_MS: ${SITE_THROTTLE_DELAY_MS}
+      SAVE_SCREENSHOTS: ${SAVE_SCREENSHOTS}
+      SAVE_LOGS: ${SAVE_LOGS}
+      PRESENTATIONS_DISPATCH_INTERVAL_S: ${PRESENTATIONS_DISPATCH_INTERVAL_S:-60}
+      PRESENTATIONS_LEASE_TIMEOUT_S: ${PRESENTATIONS_LEASE_TIMEOUT_S:-1800}
+      SOKRATIC_USERNAME: ${SOKRATIC_USERNAME}
+      SOKRATIC_PASSWORD: ${SOKRATIC_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_PREFIX: ${S3_PREFIX}
+      S3_REGION: ${S3_REGION}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+      S3_VERIFY_SSL: ${S3_VERIFY_SSL:-true}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
