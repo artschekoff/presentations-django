@@ -97,6 +97,7 @@ kill:
 
 run-all:
 	@bash -c 'set -euo pipefail; \
+	set -a; source .env; set +a; \
 	$(PYTHON) -m celery -A presentations worker -l info --pool=$(CELERY_POOL) --concurrency=$(CELERY_CONCURRENCY) & CELERY_PID=$$!; \
 	$(PYTHON) -m celery -A presentations beat -l info & BEAT_PID=$$!; \
 	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 --access-log /dev/null presentations.asgi:application & DAPHNE_PID=$$!; \
@@ -104,7 +105,9 @@ run-all:
 	wait $$DAPHNE_PID'
 
 debug:
-	@DJANGO_DEBUG=1 bash -c 'set -euo pipefail; \
+	@bash -c 'set -euo pipefail; \
+	set -a; source .env; set +a; \
+	DJANGO_DEBUG=1 \
 	$(PYTHON) -m celery -A presentations worker -l debug --pool=$(CELERY_POOL) --concurrency=1 & CELERY_PID=$$!; \
 	$(PYTHON) -m celery -A presentations beat -l debug & BEAT_PID=$$!; \
 	$(PYTHON) -m daphne -b 0.0.0.0 -p 8000 --access-log /dev/null presentations.asgi:application & DAPHNE_PID=$$!; \

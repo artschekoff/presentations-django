@@ -58,6 +58,7 @@ class _BrowserPool:
         self._active_tabs_lock: asyncio.Lock | None = None
         self._auth_lock: asyncio.Lock | None = None
         self._is_authenticated = False
+        self._auth_failed_until: float = 0.0
         self._init_error: Exception | None = None
         self._ready = threading.Event()
 
@@ -106,6 +107,7 @@ class _BrowserPool:
             ),
         )
         self._is_authenticated = False
+        self._auth_failed_until = 0.0
         logger.info(
             "BrowserPool: started (headless=%s, max_tabs=%d, worker_pid=%d, browser_id=%s)",
             headless,
@@ -256,6 +258,8 @@ class _BrowserPool:
         self._ensure_running()
         return await self.context.new_page()
 
+    _AUTH_COOLDOWN_S = 30
+
     async def ensure_authenticated(
         self,
         *,
@@ -263,15 +267,28 @@ class _BrowserPool:
         logger_obj: logging.Logger,
         storage: Any,
     ) -> None:
+        import time
+
         self._ensure_running()
         if self._is_authenticated:
             return
         if self._auth_lock is None:
             raise RuntimeError("BrowserPool: auth lock is not initialized")
 
+        now = time.monotonic()
+        if now < self._auth_failed_until:
+            raise RuntimeError(
+                f"BrowserPool: auth on cooldown, retry in {self._auth_failed_until - now:.0f}s"
+            )
+
         async with self._auth_lock:
             if self._is_authenticated:
                 return
+            now = time.monotonic()
+            if now < self._auth_failed_until:
+                raise RuntimeError(
+                    f"BrowserPool: auth on cooldown, retry in {self._auth_failed_until - now:.0f}s"
+                )
 
             login = os.environ.get("SOKRATIC_USERNAME")
             password = os.environ.get("SOKRATIC_PASSWORD")
@@ -308,11 +325,20 @@ class _BrowserPool:
                     generation_id=f"auth-{generation_id}",
                 )
                 self._is_authenticated = True
+                self._auth_failed_until = 0.0
                 logger.info(
                     "BrowserPool: shared authentication completed (worker_pid=%d, browser_id=%s)",
                     os.getpid(),
                     hex(id(self.browser)),
                 )
+            except Exception:
+                self._auth_failed_until = time.monotonic() + self._AUTH_COOLDOWN_S
+                logger.warning(
+                    "BrowserPool: auth failed, cooldown %ds (worker_pid=%d)",
+                    self._AUTH_COOLDOWN_S,
+                    os.getpid(),
+                )
+                raise
             finally:
                 if auth_source.page is not None:
                     try:
