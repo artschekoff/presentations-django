@@ -215,6 +215,19 @@ class _BrowserPool:
         self._ensure_running()
         return self._active_tabs
 
+    @property
+    def local_active_tabs(self) -> int:
+        """Active tab count without triggering pool initialization."""
+        with self._lock:
+            if (
+                self._thread is not None
+                and self._thread.is_alive()
+                and self._ready.is_set()
+                and self._init_error is None
+            ):
+                return self._active_tabs
+        return 0
+
     @asynccontextmanager
     async def tab_slot(self, task_id: str) -> AsyncIterator[None]:
         self._ensure_running()
@@ -653,14 +666,17 @@ def dispatch_pending_presentations() -> None:
                 status="pending", processing_since=None
             )
 
-        # --- dispatch all pending tasks ---
-        processing_count = Presentation.objects.filter(status="processing").count()
-        available_slots = max(settings.PRESENTATIONS_MAX_TABS - processing_count, 0)
+        # --- dispatch pending tasks based on LOCAL worker capacity ---
+        # Each worker independently manages its own tab budget via the
+        # in-process _browser_pool, so multiple workers sharing the same
+        # DB no longer starve each other.
+        local_active = _browser_pool.local_active_tabs
+        available_slots = max(settings.PRESENTATIONS_MAX_TABS - local_active, 0)
 
         if available_slots <= 0:
             logger.info(
-                "Outbox relay: no free slots (processing=%d, max_tabs=%d).",
-                processing_count,
+                "Outbox relay: no free slots (local_active=%d, max_tabs=%d).",
+                local_active,
                 settings.PRESENTATIONS_MAX_TABS,
             )
             return
@@ -674,9 +690,9 @@ def dispatch_pending_presentations() -> None:
             generate_presentation_task.delay(str(pres_id))
         if pending_ids:
             logger.info(
-                "Outbox relay dispatched %d presentation(s) (processing=%d, max_tabs=%d).",
+                "Outbox relay dispatched %d presentation(s) (local_active=%d, max_tabs=%d).",
                 len(pending_ids),
-                processing_count,
+                local_active,
                 settings.PRESENTATIONS_MAX_TABS,
             )
     except Exception:
