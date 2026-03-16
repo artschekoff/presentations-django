@@ -13,6 +13,7 @@ from asgiref.sync import sync_to_async
 from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Count, F, Q
 from django.utils import timezone
 
@@ -462,10 +463,10 @@ def generate_presentation_task(presentation_id: str) -> None:
     task_id = presentation.task_id or str(presentation_id)
     logger.info("Generate task started: task_id=%s", task_id)
 
-    # Atomically claim the task: only proceed if status is still 'pending'.
-    # This prevents double-execution when the relay dispatches duplicates.
+    # Atomically claim the task: accept "queued" (normal path via relay)
+    # or "pending" (backward compat / manual dispatch).
     claimed = Presentation.objects.filter(
-        id=presentation_id, status="pending"
+        id=presentation_id, status__in=["queued", "pending"]
     ).update(status="processing", processing_since=timezone.now())
     if not claimed:
         logger.info(
@@ -635,9 +636,11 @@ def generate_presentation_task(presentation_id: str) -> None:
         except Exception:
             logger.exception("Failed to restart browser pool")
         _handle_task_failure(presentation, presentation_id, exc)
+        dispatch_pending_presentations.apply_async(countdown=2)
     # Intentional broad catch: task may fail for any reason (network, Playwright, API).
     except Exception as exc:  # pragma: no cover
         _handle_task_failure(presentation, presentation_id, exc)
+        dispatch_pending_presentations.apply_async(countdown=2)
 
 
 @shared_task
@@ -661,10 +664,18 @@ def dispatch_pending_presentations() -> None:
             ).values_list("id", flat=True)
         )
         if stuck_ids:
-            logger.warning("Outbox relay: resetting %d stuck presentation(s) to pending.", len(stuck_ids))
+            logger.warning("Outbox relay: resetting %d stuck processing presentation(s) to pending.", len(stuck_ids))
             Presentation.objects.filter(id__in=stuck_ids).update(
                 status="pending", processing_since=None
             )
+
+        # --- recover stuck queued tasks (dispatched but never claimed) ---
+        queued_cutoff = timezone.now() - timezone.timedelta(minutes=5)
+        stuck_queued = Presentation.objects.filter(
+            status="queued", processing_since__lt=queued_cutoff
+        ).update(status="pending", processing_since=None)
+        if stuck_queued:
+            logger.warning("Outbox relay: reset %d stuck queued presentation(s) to pending.", stuck_queued)
 
         # --- dispatch pending tasks based on LOCAL worker capacity ---
         # Each worker independently manages its own tab budget via the
@@ -681,11 +692,22 @@ def dispatch_pending_presentations() -> None:
             )
             return
 
-        pending_ids = list(
-            Presentation.objects.filter(status="pending")
-            .order_by("created_at")
-            .values_list("id", flat=True)[:available_slots]
-        )
+        # Atomically select and mark as "queued" using row-level locking.
+        # SKIP LOCKED ensures concurrent relays (e.g. production + slave)
+        # pick different presentations without duplicates.
+        with transaction.atomic():
+            pending_ids = list(
+                Presentation.objects
+                .select_for_update(skip_locked=True)
+                .filter(status="pending")
+                .order_by("created_at")
+                .values_list("id", flat=True)[:available_slots]
+            )
+            if pending_ids:
+                Presentation.objects.filter(id__in=pending_ids).update(
+                    status="queued", processing_since=timezone.now()
+                )
+
         for pres_id in pending_ids:
             generate_presentation_task.delay(str(pres_id))
         if pending_ids:
