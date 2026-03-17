@@ -69,6 +69,7 @@ services:
       - app-network
 
 networks:
+  # test
   app-network:
     driver: bridge
 
