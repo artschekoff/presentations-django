@@ -13,7 +13,7 @@ from asgiref.sync import sync_to_async
 from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import close_old_connections, transaction
+from django.db import close_old_connections, connections, transaction
 from django.db.models import Count, F, Q
 from django.utils import timezone
 
@@ -384,14 +384,16 @@ def _safe_files(value: Iterable[str] | None) -> list[str]:
 
 
 def _reconnect_and(func: Any, *args: Any, **kwargs: Any) -> Any:
-    """Close stale DB connections before calling *func*.
+    """Forcibly close all DB connections, then call *func*.
 
-    Required when ORM calls originate from async contexts (e.g. sync_to_async
-    inside the browser-pool event loop). PostgreSQL may silently drop idle
-    connections; calling close_old_connections() forces Django to open a fresh
-    one rather than reusing a dead socket.
+    When ORM calls originate from async worker threads (sync_to_async inside the
+    browser-pool event loop) the thread-local psycopg connection may have been
+    silently killed by PostgreSQL or a proxy. close_old_connections() only drops
+    connections past CONN_MAX_AGE and may skip already-broken sockets.
+    connections.close_all() unconditionally tears down every connection in the
+    current thread, so the next ORM call opens a guaranteed-fresh one.
     """
-    close_old_connections()
+    connections.close_all()
     return func(*args, **kwargs)
 
 
@@ -418,6 +420,7 @@ def _handle_task_failure(
     presentation: Presentation, presentation_id: str, exc: Exception
 ) -> None:
     logger.exception("Generate task failed: task_id=%s: %s", presentation.task_id, exc)
+    connections.close_all()
     Presentation.objects.filter(id=presentation_id).update(retry_count=F("retry_count") + 1)
     retry_count = Presentation.objects.get(id=presentation_id).retry_count
     max_retries = 3
@@ -607,6 +610,7 @@ def generate_presentation_task(presentation_id: str) -> None:
             task_id,
             len(files),
         )
+        connections.close_all()
         Presentation.objects.filter(id=presentation_id).update(
             status="done",
             files=files,
