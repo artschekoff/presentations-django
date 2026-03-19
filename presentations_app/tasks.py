@@ -13,7 +13,7 @@ from asgiref.sync import sync_to_async
 from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from django.db.models import Count, F, Q
 from django.utils import timezone
 
@@ -383,6 +383,18 @@ def _safe_files(value: Iterable[str] | None) -> list[str]:
     return [str(item) for item in value]
 
 
+def _reconnect_and(func: Any, *args: Any, **kwargs: Any) -> Any:
+    """Close stale DB connections before calling *func*.
+
+    Required when ORM calls originate from async contexts (e.g. sync_to_async
+    inside the browser-pool event loop). PostgreSQL may silently drop idle
+    connections; calling close_old_connections() forces Django to open a fresh
+    one rather than reusing a dead socket.
+    """
+    close_old_connections()
+    return func(*args, **kwargs)
+
+
 def _log_event(
     presentation: Presentation,
     *,
@@ -544,9 +556,10 @@ def generate_presentation_task(presentation_id: str) -> None:
                     payload["presentation_id"] = presentation_id
                     if payload.get("files"):
                         files_now = _safe_files(payload.get("files"))
-                        await sync_to_async(
-                            Presentation.objects.filter(id=presentation_id).update
-                        )(files=files_now)
+                        await sync_to_async(_reconnect_and)(
+                            Presentation.objects.filter(id=presentation_id).update,
+                            files=files_now,
+                        )
                         payload["file_urls"] = [
                             reverse(
                                 "presentation-file-download",
@@ -558,7 +571,8 @@ def generate_presentation_task(presentation_id: str) -> None:
                             for index in range(len(files_now))
                         ]
                     await _send_progress_async(presentation_id, payload)
-                    await sync_to_async(_log_event)(
+                    await sync_to_async(_reconnect_and)(
+                        _log_event,
                         presentation,
                         kind="progress",
                         payload=payload,
