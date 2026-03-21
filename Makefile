@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .PHONY: help install migrate makemigrations run shell test run-all lint kill clean
 .PHONY: buildx-init build-amd64 build-amd64-push
 .PHONY: secretkey addmodule refresh-module
-.PHONY: sync-remote s3-rm-png s3-rm-all s3-ls-complete
+.PHONY: sync-remote s3-rm-png s3-rm-all s3-ls-complete s3-ls-small-pdf
 
 -include .env
 
@@ -182,6 +182,21 @@ s3-ls-complete:
 	    if $$has_pdf && $$has_txt && $$has_pptx; then echo "$$dir"; fi; \
 	  done | tee s3-complete.txt; \
 	echo "Saved $$(wc -l < s3-complete.txt | tr -d " ") folders to s3-complete.txt"'
+
+s3-ls-small-pdf:
+	@bash -c 'set -euo pipefail; \
+	set -a; source .env; set +a; \
+	AWS_ACCESS_KEY_ID="$$AWS_ACCESS_KEY_ID" \
+	AWS_SECRET_ACCESS_KEY="$$AWS_SECRET_ACCESS_KEY" \
+	aws s3 ls s3://$${S3_BUCKET:-preza.kz}/ \
+	  --recursive \
+	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
+	  --no-verify-ssl \
+	| awk "/\.pdf$$/ && \$$3 < 1048576 { sub(/[^\/]*$$/, \"\", \$$4); print \$$4 }" \
+	| sed "s|/$$||" \
+	| sort -u \
+	| tee s3-small-pdf.txt; \
+	echo "Found $$(wc -l < s3-small-pdf.txt | tr -d \" \") folders with PDF < 1MB"'
 
 deploy:
 	wget -qO- https://docker.nftwitting.com/api/deploy/compose/eB6AM2XrQE5Gv_H501-xM
