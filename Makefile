@@ -138,65 +138,16 @@ sync-remote:
 	rsync -avz --progress trafficconnect:/home/techcode/gdz/storage/ storage/remote/
 
 s3-rm-png:
-	@bash -c 'set -euo pipefail; \
-	set -a; source .env; set +a; \
-	AWS_ACCESS_KEY_ID="$$AWS_ACCESS_KEY_ID" \
-	AWS_SECRET_ACCESS_KEY="$$AWS_SECRET_ACCESS_KEY" \
-	aws s3 rm s3://$${S3_BUCKET:-preza.kz}/ \
-	  --recursive \
-	  --exclude "*" \
-	  --include "*.txt" \
-	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
-	  --no-verify-ssl'
+	$(PYTHON) scripts/s3_rm_by_ext.py .txt
 
 s3-rm-all:
-	@bash -c 'set -euo pipefail; \
-	set -a; source .env; set +a; \
-	AWS_ACCESS_KEY_ID="$$AWS_ACCESS_KEY_ID" \
-	AWS_SECRET_ACCESS_KEY="$$AWS_SECRET_ACCESS_KEY" \
-	aws s3 rm s3://$${S3_BUCKET:-preza.kz}/ \
-	  --recursive \
-	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
-	  --no-verify-ssl'
+	$(PYTHON) scripts/s3_rm_by_ext.py --all
 
 s3-ls-complete:
-	@bash -c 'set -euo pipefail; \
-	set -a; source .env; set +a; \
-	AWS_ACCESS_KEY_ID="$$AWS_ACCESS_KEY_ID" \
-	AWS_SECRET_ACCESS_KEY="$$AWS_SECRET_ACCESS_KEY" \
-	aws s3 ls s3://$${S3_BUCKET:-preza.kz}/ \
-	  --recursive \
-	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
-	  --no-verify-ssl \
-	| sed -E "s/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} +[0-9]+ //" \
-	| sed "s|/[^/]*$$||" \
-	| sort -u \
-	| while read -r dir; do \
-	    has_pdf=false; has_txt=false; has_pptx=false; \
-	    while IFS= read -r file; do \
-	      case "$$file" in *.pdf) has_pdf=true;; *.txt) has_txt=true;; *.pptx) has_pptx=true;; esac; \
-	    done < <(aws s3 ls "s3://$${S3_BUCKET:-preza.kz}/$$dir/" \
-	      --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
-	      --no-verify-ssl \
-	    | sed -E "s/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} +[0-9]+ //"); \
-	    if $$has_pdf && $$has_txt && $$has_pptx; then echo "$$dir"; fi; \
-	  done | tee s3-complete.txt; \
-	echo "Saved $$(wc -l < s3-complete.txt | tr -d " ") folders to s3-complete.txt"'
+	$(PYTHON) scripts/s3_ls_complete.py
 
 s3-ls-small-pdf:
-	@bash -c 'set -euo pipefail; \
-	set -a; source .env; set +a; \
-	AWS_ACCESS_KEY_ID="$$AWS_ACCESS_KEY_ID" \
-	AWS_SECRET_ACCESS_KEY="$$AWS_SECRET_ACCESS_KEY" \
-	aws s3 ls s3://$${S3_BUCKET:-preza.kz}/ \
-	  --recursive \
-	  --endpoint-url "$${S3_ENDPOINT_URL:-https://s3.ru-3.storage.selcloud.ru}" \
-	  --no-verify-ssl \
-	| awk "/\.pdf$$/ && \$$3 < 1048576 { sub(/[^\/]*$$/, \"\", \$$4); print \$$4 }" \
-	| sed "s|/$$||" \
-	| sort -u \
-	| tee s3-small-pdf.txt; \
-	echo "Found $$(wc -l < s3-small-pdf.txt | tr -d \" \") folders with PDF < 1MB"'
+	$(PYTHON) scripts/s3_ls_small_pdf.py
 
 deploy:
 	wget -qO- https://docker.nftwitting.com/api/deploy/compose/eB6AM2XrQE5Gv_H501-xM
