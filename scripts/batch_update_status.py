@@ -1,4 +1,4 @@
-"""Batch-update presentations status to 'queued' for task_ids from s3-small-pdf.txt."""
+"""Batch-update presentations status to 'pending' for task_ids from s3-small-pdf.txt."""
 
 import os
 import time
@@ -9,7 +9,7 @@ load_dotenv()
 
 BATCH_SIZE = 20
 INPUT_FILE = "s3-small-pdf.txt"
-NEW_STATUS = "queued"
+NEW_STATUS = "pending"
 
 
 def main():
@@ -52,15 +52,19 @@ def main():
                     )
                     total_updated += cur.rowcount
                     elapsed = time.time() - start
-                    print(f"  batch {batch_num}/{total_batches}: "
-                          f"{len(batch)} ids → {cur.rowcount} rows updated "
-                          f"({total_updated} total, {elapsed:.1f}s)")
+                    print(
+                        f"  batch {batch_num}/{total_batches}: "
+                        f"{len(batch)} ids → {cur.rowcount} rows updated "
+                        f"({total_updated} total, {elapsed:.1f}s)"
+                    )
     finally:
         conn.close()
         print("Connection closed.")
 
     elapsed = time.time() - start
-    print(f"\nDone in {elapsed:.1f}s. Total rows updated: {total_updated}/{len(task_ids)}")
+    print(
+        f"\nDone in {elapsed:.1f}s. Total rows updated: {total_updated}/{len(task_ids)}"
+    )
 
 
 if __name__ == "__main__":
