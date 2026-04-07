@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BATCH_SIZE = 20
-INPUT_FILE = "s3-small-pdf.txt"
+# INPUT_FILE = "s3-small-pdf.txt"
+INPUT_FILE = "s3-fewer-than-3-files.txt"
 NEW_STATUS = "pending"
 
 
