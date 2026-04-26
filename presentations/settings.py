@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -160,6 +161,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "presentations_app.tasks.dispatch_pending_presentations",
         "schedule": _int_env("PRESENTATIONS_DISPATCH_INTERVAL_S", 60),  # 1 minute
     },
+    "hourly-telegram-presentation-stats": {
+        "task": "presentations_app.tasks.send_hourly_telegram_stats",
+        "schedule": crontab(minute=0),  # every hour at :00 (CELERY_TIMEZONE, UTC)
+    },
 }
 
 STATIC_URL = "static/"
@@ -192,6 +197,28 @@ S3_SECRET_ACCESS_KEY = _read_env("AWS_SECRET_ACCESS_KEY")
 S3_VERIFY_SSL = _bool_env("S3_VERIFY_SSL", True)
 S3_PRESIGN_EXPIRY = _int_env("S3_PRESIGN_EXPIRY", 3600)
 
+# s3 | sftp | local | none | auto (auto: SFTP_HOST -> sftp, else S3_BUCKET -> s3, else local)
+STORAGE_BACKEND = _read_env("STORAGE_BACKEND", "auto")
+SFTP_HOST = _read_env("SFTP_HOST", "")
+SFTP_PORT = _int_env("SFTP_PORT", 22)
+SFTP_USER = _read_env("SFTP_USER", "")
+SFTP_PASSWORD = _read_env("SFTP_PASSWORD", "")
+SFTP_PRIVATE_KEY_PATH = _read_env("SFTP_PRIVATE_KEY_PATH", "")
+SFTP_BASE_PATH = _read_env("SFTP_BASE_PATH", "/")
+SFTP_KNOWN_HOSTS = _read_env("SFTP_KNOWN_HOSTS", "")
+
+PRESENTATIONS_ZIP_OUTPUT = _bool_env("PRESENTATIONS_ZIP_OUTPUT", True)
+PRESENTATIONS_ZIP_DELETE_ORIGINALS = _bool_env("PRESENTATIONS_ZIP_DELETE_ORIGINALS", True)
+PRESENTATIONS_PDF_GS_COMPRESS = _bool_env("PRESENTATIONS_PDF_GS_COMPRESS", True)
+
+# Worker label in logs: hostname or hostname/WORKER_NODE_ID
+WORKER_NODE_ID = _read_env("WORKER_NODE_ID", "")
+
+# Hourly Telegram stats (requires both token and chat id, or task no-ops)
+TELEGRAM_BOT_TOKEN = _read_env("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_STATS_CHAT_ID = _read_env("TELEGRAM_STATS_CHAT_ID", "")
+TELEGRAM_HOURLY_STATS_ENABLED = _bool_env("TELEGRAM_HOURLY_STATS_ENABLED", True)
+
 CHANNEL_REDIS_URL = _read_env("CHANNEL_REDIS_URL", CELERY_BROKER_URL)
 CHANNEL_LAYERS = {
     "default": {
@@ -207,7 +234,10 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "standard": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}
+        "standard": {
+            "()": "presentations_app.logging_config.NodeFormatter",
+            "format": "%(asctime)s [%(worker_node)s] %(levelname)s %(name)s: %(message)s",
+        }
     },
     "handlers": {
         "console": {

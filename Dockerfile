@@ -10,6 +10,7 @@ RUN apt-get update \
         build-essential \
         supervisor \
         git \
+        ghostscript \
         fonts-dejavu \
         fonts-liberation \
         fonts-noto \
@@ -20,14 +21,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
+COPY presentations-module /app/presentations-module
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt
 
 RUN playwright install-deps chromium
 RUN playwright install chromium
-
-ARG CACHEBUST=1
-RUN pip install --no-cache-dir git+https://github.com/artschekoff/presentations-module.git
 
 COPY . /app
 RUN chmod +x /app/docker/start-web.sh

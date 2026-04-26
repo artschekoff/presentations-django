@@ -21,6 +21,7 @@ from django.db import connection, transaction
 from .dto import CreatePresentationCommandDto
 from .models import Presentation, UserToken
 from .s3 import build_s3_storage
+from .sftp_download import sftp_file_http_response
 from .services import PresentationService
 
 
@@ -59,6 +60,18 @@ def _s3_presigned_redirect(s3_uri: str) -> HttpResponseRedirect:
     storage = build_s3_storage()
     url = storage.s3_presigned_redirect(s3_uri, expires_in=settings.S3_PRESIGN_EXPIRY)
     return HttpResponseRedirect(url)
+
+
+def _remote_file_response(
+    request: HttpRequest, file_path: str, *, for_head: bool
+) -> HttpResponse:
+    if file_path.startswith("s3://"):
+        if for_head:
+            return HttpResponse(status=200)
+        return _s3_presigned_redirect(file_path)
+    if file_path.startswith("sftp://"):
+        return sftp_file_http_response(request, file_path, for_head=for_head)
+    raise Http404("Unsupported remote file reference")
 
 
 def _download_headers(file_path: str) -> dict[str, str]:
@@ -516,8 +529,8 @@ class PresentationDownloadView(View):
         )
         if not pptx_path:
             raise Http404("Presentation file not found")
-        if pptx_path.startswith("s3://"):
-            return HttpResponse(status=200)
+        if pptx_path.startswith("s3://") or pptx_path.startswith("sftp://"):
+            return _remote_file_response(request, pptx_path, for_head=True)
         if not os.path.exists(pptx_path):
             raise Http404("Presentation file not found")
         return _head_download_response(pptx_path)
@@ -530,8 +543,8 @@ class PresentationDownloadView(View):
         )
         if not pptx_path:
             raise Http404("Presentation file not found")
-        if pptx_path.startswith("s3://"):
-            return _s3_presigned_redirect(pptx_path)
+        if pptx_path.startswith("s3://") or pptx_path.startswith("sftp://"):
+            return _remote_file_response(request, pptx_path, for_head=False)
         if not os.path.exists(pptx_path):
             raise Http404("Presentation file not found")
         return _file_download_response(pptx_path)
@@ -555,8 +568,8 @@ class PresentationFileDownloadView(View):
             raise Http404("File not found") from exc
         if not file_path:
             raise Http404("File not found")
-        if file_path.startswith("s3://"):
-            return HttpResponse(status=200)
+        if file_path.startswith("s3://") or file_path.startswith("sftp://"):
+            return _remote_file_response(request, file_path, for_head=True)
         if not os.path.exists(file_path):
             raise Http404("File not found")
         return _head_download_response(file_path)
@@ -576,8 +589,8 @@ class PresentationFileDownloadView(View):
             raise Http404("File not found") from exc
         if not file_path:
             raise Http404("File not found")
-        if file_path.startswith("s3://"):
-            return _s3_presigned_redirect(file_path)
+        if file_path.startswith("s3://") or file_path.startswith("sftp://"):
+            return _remote_file_response(request, file_path, for_head=False)
         if not os.path.exists(file_path):
             raise Http404("File not found")
         return _file_download_response(file_path)

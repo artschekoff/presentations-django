@@ -1,70 +1,69 @@
-# Изменение формы загрузки
+# Upload form change
 
-Изменение формы загрузки с поддержкой импорта задач из .csv файла
+The upload flow now supports bulk task import from a `.csv` file.
 
-## Требования
+## Requirements
 
-1. Первоначальный экран на сайте теперь представляет из себя выбор из двух режимов работы: ручной + импорт из .csv файла
-2. Ручной режим работы ведет на текущее представление формы (с формой создания задачи + кнопкой "Новое задание")
-3. Импорт из .csv-файла - это форма загрузки .csv файла, где поля файла следующие:
-  |task_id (string)|book_id(number)|topic_title(string)|class(number)|subject(string)|lang(string)|template(number|none)|
+1. The first screen is a choice between two modes: manual and CSV import.
+2. Manual mode uses the same task-creation form as before (plus a “new task” button).
+3. CSV import is a file upload with the following columns:
+  `|task_id (string)|book_id (number)|topic_title (string)|class (number)|subject (string)|lang (string)|template (number|none)|`
+  The first row is headers, then one row per task.
+4. There are two actions: “Verify” and “Add to queue”.
+5. “Add to queue” is enabled only after “Verify” and no validation errors.
+6. On “Verify”, the full CSV is read; each row is validated to match the `presentation` type. Invalid rows are listed with row number and error message.
+7. On “Add to queue”, each row becomes a `presentation` task, same as “Start generation” in manual mode.
+8. Task results must be persisted in the database.
 
-  Самая первая строка файла - заголовки, далее идут значения.
-4. Должны быть 2 кнопки "проверить" и "добавить в очередь".
-5. Добавить в очередь активируется только когда была нажата кнопка "Проверить" и никаких ошибок не было выявлено.
-6. При нажатии на кнопку "проверить" весь .csv считывается, все значения в строках проверяются на соответствие типу `presentation`. Если какую-то строку невозможно привести к типу `presentation` - сохраняется информация об ошибке и отображается на форме загрузки csv-файла с обязательным указанием строки и сообщения в которой эта ошибка произошла.
-7. После нажатия на кнопку "добавить в очередь" из каждой строки создается задача `presentation` и запускается на исполнение, как если бы была нажата кнопка "запустить генерацию" на старой форме.
-8. Убедись, что результаты выполнения задачи сохраняются в базу.
+## Clarifications
 
-## Уточнения
+### CSV fields not on the `Presentation` model
 
-### Поля CSV, отсутствующие в модели Presentation
-
-Поля `task_id`, `book_id`, `template` добавляются в модель `Presentation` как отдельные nullable-колонки:
+`task_id`, `book_id`, and `template` are added as nullable columns:
 
 - `task_id` — `CharField`, nullable
 - `book_id` — `IntegerField`, nullable
 - `template` — `IntegerField`, nullable
 
-Требуется новая миграция.
+A new migration is required.
 
-### Поле author
+### `author` field
 
-В CSV отсутствует. Для всех задач из CSV `author` всегда `null`.
+Not present in the CSV. For CSV-imported tasks, `author` is always `null`.
 
-### Поле slides_amount
+### `slides_amount`
 
-В CSV отсутствует. Значение задаётся пользователем на форме импорта через отдельный селектор (опции: 10, 30) и применяется ко всем строкам файла.
+Not in the CSV. It is set on the import form (selector, e.g. 10, 20, 30) and applied to all rows.
 
-### Поля book_id и template
+### `book_id` and `template`
 
-Сохраняются в БД как метаданные. В задачу генерации (`generate_presentation_task`) не передаются.
+Stored as metadata. Not passed to `generate_presentation_task`.
 
-### Уникальность task_id
+### `task_id` uniqueness
 
-Проверяется только в рамках загружаемого CSV-файла. Если `task_id` повторяется внутри одного файла — это ошибка валидации с указанием строки. Проверка по БД не требуется.
+Only checked within the uploaded file. Duplicates in the same file are a validation error with row reference. No DB uniqueness check at verify time.
 
-### Разделитель CSV
+### CSV format
 
-Точка с запятой (`;`). Кодировка файла — UTF-8.
+Semicolon (`;`) delimiter. UTF-8 encoding.
 
-### Валидные значения поля lang
+### Valid `lang` values
 
-`Русский` и `Казахский`. При сохранении в БД преобразуются в коды: `Казахский` → `kz`, `Русский` → `ru`.
+The `lang` cell may be `Kazakh`, `Russian`, or the legacy Cyrillic spellings for the same two languages; all map to `kz` and `ru` in the database.
 
-### UX экрана выбора режима
+### Mode selection UX
 
-Стартовый экран содержит две большие кнопки: «Ручной режим» и «Импорт из CSV». Нажатие на кнопку скрывает выбор и показывает соответствующую форму.
+The start screen has two large buttons: “Manual” and “CSV import”. The chosen mode shows the corresponding form.
 
-### После «Добавить в очередь»
+### After “Add to queue”
 
-Форма импорта остаётся видна над списком задач. Список задач с прогресс-барами появляется ниже, как в ручном режиме.
+The import form stays above the task list. Tasks with progress appear below, as in manual mode.
 
-## Критерии приемки
+## Acceptance criteria
 
-1. Пользователь может зайти на форму и выбрать режим работы: ручной или импорт из .csv
-2. Ручной режим работы должен работать как и прежде
-3. Импорт должен корректно загружать и проверять файл, а так же уметь корректно создать очередь задач для исполнения
-4. В случае ошибок валидации - они должны быть отображены в понятном виде для пользователя.
-5. Задачи должны быть заведены корректно в базу перед началом их исполнения чтобы все было независимо и стабильно.
-6. Результаты выполнения задач должны корректно записываться в базу (пути до файлов презентаций) и отображаться пользователю.
+1. The user can pick manual or CSV import.
+2. Manual mode behaves as before.
+3. Import loads and validates the file and can enqueue tasks correctly.
+4. Validation errors are clear to the user.
+5. Tasks are written to the database correctly before execution.
+6. Task results (presentation file paths) are stored and shown to the user.

@@ -121,8 +121,8 @@ secretkey:
 	PY
 
 refresh-module:
-	pip uninstall -y presentations-module || true
-	pip install git+https://github.com/artschekoff/presentations-module.git
+	pip uninstall -y presentations_module presentations-module 2>/dev/null || true
+	pip install -e ./presentations-module/
 
 buildx-init:
 	docker buildx create --use --name multiarch

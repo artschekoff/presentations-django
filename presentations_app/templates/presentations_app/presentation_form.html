@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Генерация презентации</title>
+    <title>Presentation generation</title>
     <style>
       :root {
         color-scheme: light;
@@ -449,45 +449,45 @@
     {% if user.is_authenticated %}
     <div class="user-bar">
       <div class="user-info">
-        Вы вошли как <strong>{{ user.username }}</strong>
+        Signed in as <strong>{{ user.username }}</strong>
       </div>
       <div class="user-actions">
         <form method="post" action="{% url 'logout' %}" style="display: inline;">
           {% csrf_token %}
-          <button type="submit" class="btn-logout">Выход</button>
+          <button type="submit" class="btn-logout">Sign out</button>
         </form>
       </div>
     </div>
     {% else %}
     <div class="user-bar">
-      <div class="user-info">Вы не авторизованы</div>
+      <div class="user-info">Not signed in</div>
       <div class="user-actions">
-        <a href="{% url 'login' %}" class="btn-token">Войти</a>
+        <a href="{% url 'login' %}" class="btn-token">Sign in</a>
       </div>
     </div>
     {% endif %}
     <main>
       <header>
-        <h1>Сформируйте новую презентацию</h1>
-        <p>Заполните параметры, чтобы запустить генерацию и следить за прогрессом.</p>
+        <h1>Create a new presentation</h1>
+        <p>Fill in the fields to start generation and track progress.</p>
       </header>
 
       <!-- Mode selection -->
       <section class="panel" id="mode-selection">
-        <p style="margin-bottom: 16px; font-family: Arial, sans-serif; font-size: 16px;">Выберите режим работы:</p>
+        <p style="margin-bottom: 16px; font-family: Arial, sans-serif; font-size: 16px;">Choose a mode:</p>
         <div class="mode-grid">
           <button class="mode-btn" id="btn-manual">
-            Ручной режим
-            <span class="mode-label">Одна задача вручную</span>
+            Manual
+            <span class="mode-label">One task at a time</span>
           </button>
           <button class="mode-btn" id="btn-csv">
-            Импорт из CSV
-            <span class="mode-label">Массовая загрузка из файла</span>
+            CSV import
+            <span class="mode-label">Bulk upload from a file</span>
           </button>
         </div>
         <div style="margin-top: 16px; text-align: center;">
           <button type="button" id="btn-load-active" class="btn-outline" style="font-size: 14px; padding: 10px 20px;">
-            Загрузить активные задачи
+            Load active tasks
           </button>
         </div>
       </section>
@@ -497,21 +497,21 @@
         <div class="panel">
           <form id="presentation-form">
             <div>
-              <label for="topic">Тема</label>
-              <input id="topic" name="topic" type="text" required placeholder="Например: Энергия ветра" />
+              <label for="topic">Topic</label>
+              <input id="topic" name="topic" type="text" required placeholder="e.g. Wind energy" />
             </div>
             <div>
-              <label for="author">Автор</label>
-              <input id="author" name="author" type="text" placeholder="Необязательно" />
+              <label for="author">Author</label>
+              <input id="author" name="author" type="text" placeholder="Optional" />
             </div>
             <div>
-              <label for="language">Язык</label>
+              <label for="language">Language</label>
               <select id="language" name="language">
-                <option value="kz">kz — казахский</option>
+                <option value="kz">kz — Kazakh</option>
               </select>
             </div>
             <div>
-              <label for="slides_amount">Кол-во слайдов</label>
+              <label for="slides_amount">Number of slides</label>
               <select id="slides_amount" name="slides_amount">
                 <option value="10">10</option>
                 <option value="20" selected>20</option>
@@ -519,31 +519,31 @@
               </select>
             </div>
             <div>
-            <label for="csv-file">CSV-файл (разделитель: ; <span style="margin-left: 8px;">кодировка: UTF-8</span>)</label>
+            <label for="grade">Grade / class</label>
               <select id="grade" name="grade">
-                <option value="1">1 класс</option>
-                <option value="2">2 класс</option>
-                <option value="3">3 класс</option>
-                <option value="4">4 класс</option>
-                <option value="5">5 класс</option>
-                <option value="6">6 класс</option>
-                <option value="7">7 класс</option>
-                <option value="8">8 класс</option>
-                <option value="9">9 класс</option>
-                <option value="10">10 класс</option>
-                <option value="11">11 класс</option>
+                <option value="1">Grade 1</option>
+                <option value="2">Grade 2</option>
+                <option value="3">Grade 3</option>
+                <option value="4">Grade 4</option>
+                <option value="5">Grade 5</option>
+                <option value="6">Grade 6</option>
+                <option value="7">Grade 7</option>
+                <option value="8">Grade 8</option>
+                <option value="9">Grade 9</option>
+                <option value="10">Grade 10</option>
+                <option value="11">Grade 11</option>
               </select>
             </div>
             <div>
-              <label for="subject">Предмет</label>
-              <input id="subject" name="subject" type="text" required placeholder="Например: Математика" />
+              <label for="subject">Subject</label>
+              <input id="subject" name="subject" type="text" required placeholder="e.g. Math" />
             </div>
-            <button type="submit" id="submit-btn">Запустить генерацию</button>
+            <button type="submit" id="submit-btn">Start generation</button>
           </form>
           <div class="error" id="manual-error"></div>
         </div>
         <div class="add-task hidden" id="add-task">
-          <button type="button" id="add-task-btn">+ Новое задание</button>
+          <button type="button" id="add-task-btn">+ New task</button>
         </div>
       </section>
 
@@ -551,11 +551,11 @@
       <section class="panel hidden" id="csv-section">
         <form id="csv-form">
           <div>
-            <label for="csv-file">CSV-файл (разделитель: ; &nbsp;&nbsp; кодировка: UTF-8)</label>
+            <label for="csv-file">CSV file (separator: ; &nbsp;&nbsp; encoding: UTF-8)</label>
             <input type="file" id="csv-file" accept=".csv" />
           </div>
           <div>
-            <label for="csv-slides-amount">Кол-во слайдов</label>
+            <label for="csv-slides-amount">Number of slides</label>
             <select id="csv-slides-amount">
               <option value="10">10</option>
               <option value="20" selected>20</option>
@@ -563,8 +563,8 @@
             </select>
           </div>
           <div class="csv-actions">
-            <button type="button" id="btn-verify">Проверить</button>
-            <button type="button" id="btn-queue" class="btn-outline" disabled>Добавить в очередь</button>
+            <button type="button" id="btn-verify">Verify</button>
+            <button type="button" id="btn-queue" class="btn-outline" disabled>Add to queue</button>
           </div>
         </form>
         <div id="csv-feedback"></div>
@@ -663,7 +663,7 @@
       }
 
       function formatTitle(payload) {
-        return `${payload.topic} • ${payload.language} • ${payload.slides_amount} слайдов`;
+        return `${payload.topic} • ${payload.language} • ${payload.slides_amount} slides`;
       }
 
       function createTaskRow(payload) {
@@ -680,7 +680,7 @@
 
         const status = document.createElement("div");
         status.className = "task-status";
-        status.textContent = "В очереди";
+        status.textContent = "Queued";
 
         const progress = document.createElement("div");
         progress.className = "task-progress";
@@ -694,7 +694,7 @@
 
         const actions = document.createElement("div");
         actions.className = "task-actions";
-        actions.textContent = "Генерация…";
+        actions.textContent = "Generating…";
 
         row.append(meta, actions);
         tasksEl.prepend(row);
@@ -714,7 +714,7 @@
           link.href = url;
           link.target = "_blank";
           link.rel = "noreferrer";
-          const filename = file.split("/").slice(-1)[0] || `Файл ${index + 1}`;
+          const filename = file.split("/").slice(-1)[0] || `File ${index + 1}`;
           link.textContent = filename;
           linksEl.appendChild(link);
         });
@@ -734,8 +734,8 @@
 
         const status = document.createElement("div");
         status.className = "task-status";
-        const retryLabel = task.retry_count != null ? ` (${task.retry_count}/3 попыток)` : "";
-        status.textContent = `Ошибка генерации${retryLabel}`;
+        const retryLabel = task.retry_count != null ? ` (${task.retry_count}/3 attempts)` : "";
+        status.textContent = `Generation failed${retryLabel}`;
 
         const progress = document.createElement("div");
         progress.className = "task-progress";
@@ -750,9 +750,9 @@
 
         const restartBtn = document.createElement("button");
         restartBtn.className = "btn-restart";
-        restartBtn.textContent = "↺ Перезапустить";
+        restartBtn.textContent = "↺ Restart";
         restartBtn.addEventListener("click", async () => {
-          startButtonLoading(restartBtn, "Запускаю…");
+          startButtonLoading(restartBtn, "Starting…");
           try {
             const resp = await apiFetch(`/api/presentations/${task.id}/restart/`, { 
               method: "POST"
@@ -764,19 +764,19 @@
             }
             // Same ID — convert row in place: remove failed styling, add progress UI
             row.classList.remove("task-row--failed");
-            status.textContent = "В очереди";
+            status.textContent = "Queued";
             status.style.color = "";
             links.innerHTML = "";
             restartBtn.remove();
             const actionsEl = document.createElement("div");
             actionsEl.className = "task-actions";
-            actionsEl.textContent = "Генерация…";
+            actionsEl.textContent = "Generating…";
             row.appendChild(actionsEl);
             sockets.delete(task.id);
             connectSocket(task.id, { row, status, progressFill, links, actions: actionsEl });
           } catch (err) {
-            stopButtonLoading(restartBtn, { text: "↺ Перезапустить", disabled: false, restoreText: false });
-            alert(`Ошибка перезапуска: ${err.message}`);
+            stopButtonLoading(restartBtn, { text: "↺ Restart", disabled: false, restoreText: false });
+            alert(`Restart error: ${err.message}`);
           }
         });
 
@@ -794,14 +794,14 @@
         socket.onmessage = (event) => {
           const payload = JSON.parse(event.data || "{}");
           const percent = payload.percent ?? 0;
-          const stage = payload.stage ?? "В процессе";
+          const stage = payload.stage ?? "In progress";
 
           if (stage === "retrying") {
             const attempt = payload.retry_count ?? "?";
             const max = payload.max_retries ?? 3;
             ui.progressFill.style.width = "0%";
-            ui.status.textContent = `Повтор попытки ${attempt}/${max}…`;
-            ui.actions.textContent = "Повтор";
+            ui.status.textContent = `Retry ${attempt}/${max}…`;
+            ui.actions.textContent = "Retrying";
             return;
           }
 
@@ -810,20 +810,20 @@
             const max = payload.max_retries ?? 3;
             ui.row.classList.add("task-row--failed");
             ui.progressFill.style.width = "0%";
-            ui.status.textContent = `Ошибка генерации (${attempt}/${max} попыток)`;
-            ui.actions.textContent = "Провалено";
+            ui.status.textContent = `Generation failed (${attempt}/${max} attempts)`;
+            ui.actions.textContent = "Failed";
             return;
           }
 
           ui.row.classList.remove("task-row--failed");
           ui.progressFill.style.width = `${percent}%`;
           ui.status.textContent = `${stage} (${percent}%)`;
-          ui.actions.textContent = "Выполняется";
+          ui.actions.textContent = "Running";
           if (payload.files || payload.file_urls) {
             updateLinks(ui.links, payload.files, payload.file_urls);
           }
           if (stage === "completed" || stage === "done") {
-            ui.actions.textContent = "Готово";
+            ui.actions.textContent = "Done";
           }
         };
 
@@ -834,13 +834,13 @@
       // --- Load active tasks ---
       async function loadActiveTasks() {
         const btn = btnLoadActive;
-        startButtonLoading(btn, "Загружаю…");
+        startButtonLoading(btn, "Loading…");
         let added = 0;
         try {
           const resp = await apiFetch("/api/presentations/active/?limit=200");
           if (!resp.ok) {
-            alert(`Ошибка загрузки активных задач: ${resp.status} ${resp.statusText}`);
-            stopButtonLoading(btn, { text: "Загрузить активные задачи", disabled: false, restoreText: false });
+            alert(`Failed to load active tasks: ${resp.status} ${resp.statusText}`);
+            stopButtonLoading(btn, { text: "Load active tasks", disabled: false, restoreText: false });
             return;
           }
           const tasks = await resp.json();
@@ -856,14 +856,14 @@
           });
           if (btn) {
             stopButtonLoading(btn, {
-              text: added > 0 ? `Загружено ${added} задач — обновить` : "Нет новых активных задач",
+              text: added > 0 ? `Loaded ${added} task(s) — refresh` : "No new active tasks",
               disabled: false,
               restoreText: false,
             });
           }
         } catch (err) {
-          alert(`Ошибка загрузки активных задач: ${err.message}`);
-          stopButtonLoading(btn, { text: "Загрузить активные задачи", disabled: false, restoreText: false });
+          alert(`Failed to load active tasks: ${err.message}`);
+          stopButtonLoading(btn, { text: "Load active tasks", disabled: false, restoreText: false });
         }
       }
 
@@ -890,7 +890,7 @@
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        startButtonLoading(submitBtn, "Запускаю…");
+        startButtonLoading(submitBtn, "Starting…");
         manualError.textContent = "";
 
         const payload = {
@@ -910,7 +910,7 @@
 
           if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || "Ошибка при создании презентации");
+            throw new Error(error.detail || "Error creating presentation");
           }
 
           const result = await response.json();
@@ -920,7 +920,7 @@
           addTaskWrap.classList.remove("hidden");
         } catch (err) {
           stopButtonLoading(submitBtn, { disabled: false });
-          manualError.textContent = err.message || "Не удалось запустить генерацию";
+          manualError.textContent = err.message || "Could not start generation";
         }
       });
 
@@ -932,7 +932,7 @@
       });
 
       // --- CSV mode ---
-      const LANG_MAP = { "Казахский": "kz", "Русский": "ru" };
+      const LANG_MAP = { Kazakh: "kz", Russian: "ru", Казахский: "kz", Русский: "ru" };
       const VALID_LANGS = Object.keys(LANG_MAP);
       const EXPECTED_HEADERS = ["task_id", "book_id", "topic_title", "class", "subject", "lang", "template"];
 
@@ -949,7 +949,7 @@
         const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
         if (lines.length < 2) {
           return {
-            errors: [{ row: "—", field: "—", message: "Файл пуст или содержит только заголовки" }],
+            errors: [{ row: "—", field: "—", message: "File is empty or contains headers only" }],
             rows: [],
           };
         }
@@ -958,7 +958,7 @@
         const missingHeaders = EXPECTED_HEADERS.filter((h) => !headers.includes(h));
         if (missingHeaders.length > 0) {
           return {
-            errors: [{ row: 1, field: "заголовки", message: `Отсутствуют колонки: ${missingHeaders.join(", ")}` }],
+            errors: [{ row: 1, field: "headers", message: `Missing columns: ${missingHeaders.join(", ")}` }],
             rows: [],
           };
         }
@@ -984,10 +984,10 @@
           let rowValid = true;
 
           if (!task_id) {
-            errors.push({ row: rowNum, field: "task_id", message: "Не может быть пустым" });
+            errors.push({ row: rowNum, field: "task_id", message: "Cannot be empty" });
             rowValid = false;
           } else if (seenTaskIds.has(task_id)) {
-            errors.push({ row: rowNum, field: "task_id", message: `Дублируется значение "${task_id}"` });
+            errors.push({ row: rowNum, field: "task_id", message: `Duplicate value "${task_id}"` });
             rowValid = false;
           } else {
             seenTaskIds.add(task_id);
@@ -995,40 +995,40 @@
 
           let book_id = null;
           if (!book_id_raw) {
-            errors.push({ row: rowNum, field: "book_id", message: "Не может быть пустым" });
+            errors.push({ row: rowNum, field: "book_id", message: "Cannot be empty" });
             rowValid = false;
           } else {
             book_id = parseInt(book_id_raw, 10);
             if (isNaN(book_id)) {
-              errors.push({ row: rowNum, field: "book_id", message: "Должно быть целым числом" });
+              errors.push({ row: rowNum, field: "book_id", message: "Must be an integer" });
               rowValid = false;
             }
           }
 
           if (!topic_title) {
-            errors.push({ row: rowNum, field: "topic_title", message: "Не может быть пустым" });
+            errors.push({ row: rowNum, field: "topic_title", message: "Cannot be empty" });
             rowValid = false;
           }
 
           let grade = null;
           if (!class_raw) {
-            errors.push({ row: rowNum, field: "class", message: "Не может быть пустым" });
+            errors.push({ row: rowNum, field: "class", message: "Cannot be empty" });
             rowValid = false;
           } else {
             grade = parseInt(class_raw, 10);
             if (isNaN(grade) || grade < 1 || grade > 11) {
-              errors.push({ row: rowNum, field: "class", message: "Должно быть числом от 1 до 11" });
+              errors.push({ row: rowNum, field: "class", message: "Must be a number from 1 to 11" });
               rowValid = false;
             }
           }
 
           if (!subject) {
-            errors.push({ row: rowNum, field: "subject", message: "Не может быть пустым" });
+            errors.push({ row: rowNum, field: "subject", message: "Cannot be empty" });
             rowValid = false;
           }
 
           if (!VALID_LANGS.includes(lang)) {
-            errors.push({ row: rowNum, field: "lang", message: `Допустимо: ${VALID_LANGS.join(", ")}` });
+            errors.push({ row: rowNum, field: "lang", message: `Allowed: ${VALID_LANGS.join(", ")}` });
             rowValid = false;
           }
 
@@ -1036,7 +1036,7 @@
           if (template_raw && template_raw.toLowerCase() !== "none") {
             template = parseInt(template_raw, 10);
             if (isNaN(template)) {
-              errors.push({ row: rowNum, field: "template", message: "Должно быть числом или пустым" });
+              errors.push({ row: rowNum, field: "template", message: "Must be a number or empty" });
               rowValid = false;
             }
           }
@@ -1063,12 +1063,12 @@
         if (errors.length > 0) {
           const header = document.createElement("div");
           header.className = "feedback-error-header";
-          header.textContent = `Найдено ошибок: ${errors.length}`;
+          header.textContent = `Errors found: ${errors.length}`;
           csvFeedback.appendChild(header);
 
           const table = document.createElement("table");
           table.className = "error-table";
-          table.innerHTML = `<thead><tr><th>Строка</th><th>Поле</th><th>Ошибка</th></tr></thead>`;
+          table.innerHTML = `<thead><tr><th>Row</th><th>Field</th><th>Error</th></tr></thead>`;
           const tbody = document.createElement("tbody");
           errors.forEach(({ row, field, message }) => {
             const tr = document.createElement("tr");
@@ -1080,8 +1080,8 @@
         } else {
           const success = document.createElement("div");
           success.className = "feedback-success";
-          const skipNote = skippedCount > 0 ? ` Пропущено ${skippedCount} (task_id уже в базе).` : "";
-          success.textContent = `Файл проверен: ${rows.length} новых записей.${skipNote} Готово к добавлению в очередь.`;
+          const skipNote = skippedCount > 0 ? ` Skipped ${skippedCount} (task_id already in database).` : "";
+          success.textContent = `File validated: ${rows.length} new row(s).${skipNote} Ready to add to queue.`;
           csvFeedback.appendChild(success);
         }
       }
@@ -1096,11 +1096,11 @@
       btnVerify.addEventListener("click", () => {
         const file = csvFile.files[0];
         if (!file) {
-          csvFeedback.innerHTML = '<div class="error" style="margin-top:8px">Выберите файл</div>';
+          csvFeedback.innerHTML = '<div class="error" style="margin-top:8px">Select a file</div>';
           return;
         }
 
-        startButtonLoading(btnVerify, "Проверяю…");
+        startButtonLoading(btnVerify, "Validating…");
         btnQueue.disabled = true;
 
         const reader = new FileReader();
@@ -1143,7 +1143,7 @@
         };
         reader.onerror = () => {
           stopButtonLoading(btnVerify, { disabled: false });
-          csvFeedback.innerHTML = '<div class="error" style="margin-top:8px">Ошибка чтения файла</div>';
+          csvFeedback.innerHTML = '<div class="error" style="margin-top:8px">Error reading file</div>';
           btnQueue.disabled = true;
         };
         reader.readAsText(file, "UTF-8");
@@ -1152,7 +1152,7 @@
       btnQueue.addEventListener("click", async () => {
         if (validatedRows.length === 0) return;
 
-        startButtonLoading(btnQueue, "Добавляю…");
+        startButtonLoading(btnQueue, "Adding…");
         btnVerify.disabled = true;
         queueError.textContent = "";
 
@@ -1178,7 +1178,7 @@
 
           if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.detail || "Ошибка при массовом создании");
+            throw new Error(err.detail || "Error creating batch");
           }
 
           const result = await response.json();
@@ -1195,9 +1195,9 @@
             connectSocket(item.id, ui);
           });
 
-          queueError.textContent = skippedCount > 0 ? `Пропущено ${skippedCount} записей (уже существуют/дубликаты).` : "";
+          queueError.textContent = skippedCount > 0 ? `Skipped ${skippedCount} row(s) (already exist / duplicate).` : "";
         } catch (err) {
-          queueError.textContent = err?.message || "Неизвестная ошибка";
+          queueError.textContent = err?.message || "Unknown error";
         } finally {
           stopButtonLoading(btnQueue, { disabled: false });
           btnVerify.disabled = false;

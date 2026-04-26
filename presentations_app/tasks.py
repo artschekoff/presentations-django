@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import os
 import threading
+import requests
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Iterable
 
@@ -29,8 +31,10 @@ from playwright._impl._errors import TargetClosedError
 
 from presentations_module import SokraticSource, DownloadFormat
 
+from .artifact_pipeline import finalize_presentation_artifacts
 from .models import Presentation, PresentationLog
-from .s3 import build_s3_storage_if_configured
+from .s3 import build_local_generation_storage
+from .worker_node import get_worker_node_label
 
 logger = logging.getLogger(__name__)
 
@@ -511,7 +515,7 @@ def generate_presentation_task(presentation_id: str) -> None:
         files: list[str] = []
         generation_id = presentation.task_id or str(presentation.id)
         generation_dir = settings.PRESENTATIONS_DIR
-        storage = build_s3_storage_if_configured()
+        storage = build_local_generation_storage()
 
         await _browser_pool.ensure_authenticated(
             generation_id=generation_id,
@@ -605,6 +609,8 @@ def generate_presentation_task(presentation_id: str) -> None:
 
     try:
         files = _browser_pool.run(_run())
+        gen_id = presentation.task_id or str(presentation.id)
+        files = finalize_presentation_artifacts(files, generation_id=gen_id)
         logger.info(
             "Generate task completed: task_id=%s (files=%d)",
             task_id,
@@ -737,3 +743,86 @@ def dispatch_pending_presentations() -> None:
             )
     except Exception:
         logger.exception("Outbox relay failed")
+
+
+@shared_task
+def send_hourly_telegram_stats() -> None:
+    """
+    Every hour: send cluster-wide DB stats to Telegram (if token + chat id are set).
+    The message is sent from this worker; node label = hostname/WORKER_NODE_ID.
+    If multiple beat processes run, each instance may send a duplicate.
+    """
+    try:
+        if not settings.TELEGRAM_HOURLY_STATS_ENABLED:
+            return
+        token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
+        chat = (settings.TELEGRAM_STATS_CHAT_ID or "").strip()
+        if not token or not chat:
+            logger.debug(
+                "Telegram stats skipped: set TELEGRAM_BOT_TOKEN and TELEGRAM_STATS_CHAT_ID"
+            )
+            return
+
+        raw_node = get_worker_node_label()
+        node_html = html.escape(raw_node, quote=True)
+        cutoff = timezone.now() - timezone.timedelta(hours=1)
+
+        n_ok = PresentationLog.objects.filter(
+            kind="status",
+            stage="done",
+            message="Presentation generated",
+            created_at__gte=cutoff,
+        ).count()
+        n_fail = (
+            PresentationLog.objects.filter(
+                kind="error",
+                stage="failed",
+                created_at__gte=cutoff,
+            )
+            .values("presentation_id")
+            .distinct()
+            .count()
+        )
+        n_queue = Presentation.objects.filter(status__in=["pending", "queued"]).count()
+        n_processing = Presentation.objects.filter(status="processing").count()
+        n_remaining = (
+            Presentation.objects.filter(
+                status__in=["pending", "queued", "processing"]
+            ).count()
+        )
+
+        text = (
+            f"📊 <b>Last hour stats</b>\n"
+            f"Node: <code>{node_html}</code>\n\n"
+            f"✅ Completed successfully: {n_ok}\n"
+            f"❌ Failed: {n_fail}\n"
+            f"⏳ In queue (waiting): {n_queue}\n"
+            f"🔄 In progress: {n_processing}\n"
+            f"📋 Remaining (queue + in progress): {n_remaining}\n"
+        )
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        response = requests.post(
+            url,
+            json={"chat_id": chat, "text": text, "parse_mode": "HTML"},
+            timeout=30,
+        )
+        if response.status_code != 200:
+            logger.error(
+                "Telegram sendMessage failed: status=%s body=%s",
+                response.status_code,
+                (response.text or "")[:500],
+            )
+        else:
+            logger.info(
+                "Hourly Telegram stats sent (node=%s ok=%d fail=%d queue=%d proc=%d left=%d)",
+                raw_node,
+                n_ok,
+                n_fail,
+                n_queue,
+                n_processing,
+                n_remaining,
+            )
+    except Exception:  # pragma: no cover
+        logger.exception("send_hourly_telegram_stats failed")
+    finally:
+        connections.close_all()

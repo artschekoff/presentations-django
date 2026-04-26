@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Вход</title>
+    <title>Sign in</title>
     <style>
       :root {
         color-scheme: light;
@@ -112,7 +112,7 @@
   <body>
     <main>
       <header>
-        <h1>Вход в систему</h1>
+        <h1>Sign in</h1>
       </header>
 
       <div class="panel">
@@ -124,7 +124,7 @@
           {% csrf_token %}
           
           <div>
-            <label for="username">Имя пользователя</label>
+            <label for="username">Username</label>
             <input
               type="text"
               id="username"
@@ -136,7 +136,7 @@
           </div>
 
           <div>
-            <label for="password">Пароль</label>
+            <label for="password">Password</label>
             <input
               type="password"
               id="password"
@@ -146,7 +146,7 @@
             />
           </div>
 
-          <button type="submit">Войти</button>
+          <button type="submit">Sign in</button>
         </form>
       </div>
     </main>
