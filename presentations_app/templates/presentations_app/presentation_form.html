@@ -696,7 +696,10 @@
         const links = document.createElement("div");
         links.className = "task-links";
 
-        meta.append(title, status, progress, links);
+        const error = document.createElement("div");
+        error.className = "task-error";
+        error.hidden = true;
+        meta.append(title, status, error, progress, links);
 
         const actions = document.createElement("div");
         actions.className = "task-actions";
@@ -705,7 +708,7 @@
         row.append(meta, actions);
         tasksEl.prepend(row);
 
-        return { row, status, progressFill, links, actions };
+        return { row, status, error, progressFill, links, actions };
       }
 
       function updateLinks(linksEl, files, fileUrls) {
@@ -752,7 +755,15 @@
         const links = document.createElement("div");
         links.className = "task-links";
 
-        meta.append(title, status, progress, links);
+        const error = document.createElement("div");
+        error.className = "task-error";
+        if (task.error_message) {
+          error.textContent = task.error_message;
+          error.hidden = false;
+        } else {
+          error.hidden = true;
+        }
+        meta.append(title, status, error, progress, links);
 
         const restartBtn = document.createElement("button");
         restartBtn.className = "btn-restart";
@@ -808,6 +819,10 @@
             ui.progressFill.style.width = "0%";
             ui.status.textContent = `Retry ${attempt}/${max}…`;
             ui.actions.textContent = "Retrying";
+            if (ui.error) {
+              ui.error.textContent = payload.error ?? "";
+              ui.error.hidden = !payload.error;
+            }
             return;
           }
 
@@ -818,10 +833,18 @@
             ui.progressFill.style.width = "0%";
             ui.status.textContent = `Generation failed (${attempt}/${max} attempts)`;
             ui.actions.textContent = "Failed";
+            if (ui.error) {
+              ui.error.textContent = payload.error ?? "";
+              ui.error.hidden = !payload.error;
+            }
             return;
           }
 
           ui.row.classList.remove("task-row--failed");
+          if (ui.error) {
+            ui.error.textContent = "";
+            ui.error.hidden = true;
+          }
           ui.progressFill.style.width = `${percent}%`;
           ui.status.textContent = `${stage} (${percent}%)`;
           ui.actions.textContent = "Running";
