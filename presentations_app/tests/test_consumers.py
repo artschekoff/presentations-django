@@ -63,7 +63,7 @@ class SendInitialStateErrorTest(TransactionTestCase):
         consumer.send_json = AsyncMock(side_effect=lambda data: sent.append(data))
 
         import asyncio
-        asyncio.get_event_loop().run_until_complete(consumer._send_initial_state())
+        asyncio.run(consumer._send_initial_state())
 
         self.assertEqual(len(sent), 1)
         msg = sent[0]
