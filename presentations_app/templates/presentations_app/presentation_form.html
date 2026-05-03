@@ -337,6 +337,12 @@
         color: #b91c1c;
       }
 
+      .task-error {
+        font-size: 12px;
+        color: #b91c1c;
+        word-break: break-word;
+      }
+
       .btn-restart {
         background: #dc2626;
         color: #fff;
@@ -932,9 +938,11 @@
       });
 
       // --- CSV mode ---
-      const LANG_MAP = { Kazakh: "kz", Russian: "ru", Казахский: "kz", Русский: "ru" };
-      const VALID_LANGS = Object.keys(LANG_MAP);
-      const EXPECTED_HEADERS = ["task_id", "book_id", "topic_title", "class", "subject", "lang", "template"];
+      const LANG_MAP = { kazakh: "kz", russian: "ru", казахский: "kz", русский: "ru" };
+      const VALID_LANGS = ["Kazakh", "Russian", "Казахский", "Русский"];
+      function normLang(s) { return s.trim().replace(/[\s ﻿]+/g, "").toLowerCase(); }
+      const EXPECTED_HEADERS = ["task_id", "book_id", "topic_title", "class", "subject", "lang"];
+      const OPTIONAL_HEADERS = ["template"];
 
       const csvFile = document.getElementById("csv-file");
       const csvSlidesAmount = document.getElementById("csv-slides-amount");
@@ -945,8 +953,26 @@
 
       let validatedRows = [];
 
+      function splitCsvLine(line, sep) {
+        const cells = [];
+        let cur = "", inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+            else inQuotes = !inQuotes;
+          } else if (ch === sep && !inQuotes) {
+            cells.push(cur.trim()); cur = "";
+          } else {
+            cur += ch;
+          }
+        }
+        cells.push(cur.trim());
+        return cells;
+      }
+
       function parseCsv(text) {
-        const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+        const lines = text.split("\n").filter((l) => l.trim());
         if (lines.length < 2) {
           return {
             errors: [{ row: "—", field: "—", message: "File is empty or contains headers only" }],
@@ -954,7 +980,8 @@
           };
         }
 
-        const headers = lines[0].split(";").map((h) => h.trim().toLowerCase());
+        const sep = lines[0].includes(";") ? ";" : ",";
+        const headers = splitCsvLine(lines[0], sep).map((h) => h.toLowerCase());
         const missingHeaders = EXPECTED_HEADERS.filter((h) => !headers.includes(h));
         if (missingHeaders.length > 0) {
           return {
@@ -970,7 +997,7 @@
 
         for (let i = 1; i < lines.length; i++) {
           const rowNum = i + 1;
-          const cells = lines[i].split(";").map((c) => c.trim());
+          const cells = splitCsvLine(lines[i], sep);
           const get = (name) => (cells[idx(name)] ?? "").trim();
 
           const task_id = get("task_id");
@@ -979,7 +1006,7 @@
           const class_raw = get("class");
           const subject = get("subject");
           const lang = get("lang");
-          const template_raw = get("template");
+          const template_raw = headers.includes("template") ? get("template") : "";
 
           let rowValid = true;
 
@@ -1027,7 +1054,7 @@
             rowValid = false;
           }
 
-          if (!VALID_LANGS.includes(lang)) {
+          if (!LANG_MAP[normLang(lang)]) {
             errors.push({ row: rowNum, field: "lang", message: `Allowed: ${VALID_LANGS.join(", ")}` });
             rowValid = false;
           }
@@ -1048,7 +1075,7 @@
               topic: topic_title,
               grade,
               subject,
-              language: LANG_MAP[lang],
+              language: LANG_MAP[normLang(lang)],
               template,
             });
           }
