@@ -28,7 +28,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./docker/data/storage:/app/storage
+      - ./storage:/app/storage
     env_file:
       - .env
     environment:

@@ -15,7 +15,7 @@ services:
     #ports:
     #  - "8000:8000"
     volumes:
-      - ./docker/data/storage:/home/techcode/gdz/web_storage
+      - ./storage:/home/techcode/gdz/web_storage
     env_file:
       - .env
     environment:
