@@ -464,6 +464,20 @@ class PresentationActiveView(View):
             status__in=["pending", "processing", "failed"]
         ).order_by("created_at")[:limit]
 
+        presentation_ids = [p.id for p in presentations]
+        from .models import PresentationLog
+        error_logs = (
+            PresentationLog.objects.filter(
+                presentation_id__in=presentation_ids,
+                kind="error",
+            )
+            .order_by("presentation_id", "created_at")
+            .values("presentation_id", "message")
+        )
+        last_errors: dict = {}
+        for row in error_logs:
+            last_errors[row["presentation_id"]] = row["message"]
+
         data = []
         for p in presentations:
             file_urls = [
@@ -489,6 +503,7 @@ class PresentationActiveView(View):
                     "retry_count": p.retry_count,
                     "files": p.files,
                     "file_urls": file_urls,
+                    "error_message": last_errors.get(p.id),
                 }
             )
 
