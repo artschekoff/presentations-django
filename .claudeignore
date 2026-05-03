@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Django migrations (generated, not for review)
+*/migrations/
+
+# Test cache
+.pytest_cache/
+
+# Storage & generated files
+storage/
+docker/data/
+
+# Submodule build artifacts
+presentations-module/src/presentations_module.egg-info/
+presentations-module/.venv/
+
+# Serena LSP cache
+.serena/cache/
+
+# Logs
+*.log
+celerybeat-schedule*

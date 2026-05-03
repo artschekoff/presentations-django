@@ -1,7 +1,37 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip show presentations-module)"
+      "Bash(pip show presentations-module)",
+      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+      "mcp__plugin_context-mode_context-mode__ctx_search",
+      "Bash(python -m pytest tests/test_local_file_storage_basedir.py -v)",
+      "Bash(python3 -m pytest tests/test_local_file_storage_basedir.py -v)",
+      "Bash(PYTHONPATH=src python3 -m pytest tests/test_local_file_storage_basedir.py -v)",
+      "Bash(pip3 show *)",
+      "Bash(PYTHONPATH=src /Users/riskyworks/Documents/work/presentations/presentations-django/.venv/bin/python3 -m pytest tests/test_local_file_storage_basedir.py -v)",
+      "Bash(/Users/riskyworks/Documents/work/presentations/presentations-django/.venv/bin/python3 -m pytest tests/test_local_file_storage_basedir.py -v)",
+      "Bash(PYTHONPATH=src /Users/riskyworks/Documents/work/presentations/presentations-django/.venv/bin/python3 -m pytest tests/test_local_file_storage_basedir.py::test_save_bytes_no_basedir -v)",
+      "Bash(/Users/riskyworks/Documents/work/presentations/presentations-django/.venv/bin/pip install *)",
+      "Bash(PYTHONPATH=src /Users/riskyworks/Documents/work/presentations/presentations-django/.venv/bin/python3 -m pytest tests/ -v --ignore=tests/test_s3_file_storage.py --ignore=tests/test_integration_run.py)",
+      "Skill(commit-commands:commit)",
+      "Bash(git checkout *)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "Bash(git commit *)",
+      "Bash(python manage.py test presentations_app.tests.test_consumers.SendInitialStateErrorTest --verbosity=2)",
+      "Bash(python3 manage.py test presentations_app.tests.test_consumers.SendInitialStateErrorTest --verbosity=2)",
+      "Bash(.venv/bin/python manage.py test presentations_app.tests.test_consumers.SendInitialStateErrorTest --verbosity=2)",
+      "Bash(.venv/bin/python manage.py test presentations_app.tests.test_consumers.SendInitialStateErrorTest --verbosity=2 --keepdb)",
+      "Bash(python manage.py test presentations_app.tests.test_consumers --verbosity=2)",
+      "Bash(python3 manage.py test presentations_app.tests.test_consumers --verbosity=2)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute_file",
+      "Bash(.venv/bin/python manage.py test presentations_app.tests.test_consumers --verbosity=2)",
+      "Bash(.venv/bin/python manage.py test presentations_app.tests.test_consumers --verbosity=2 --keepdb)",
+      "Bash(.venv/bin/python manage.py test presentations_app.tests.test_views.PresentationActiveViewErrorTest --verbosity=2 --keepdb)",
+      "Bash(.venv/bin/python manage.py test presentations_app --verbosity=2 --keepdb)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "serena",
+    "context7"
+  ]
 }

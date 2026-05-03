@@ -276,5 +276,15 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        "celery": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "celery.utils.functional": {
+            "handlers": [],
+            "level": "WARNING",
+            "propagate": False,
+        },
     },
 }
