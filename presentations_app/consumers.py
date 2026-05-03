@@ -39,6 +39,9 @@ class PresentationProgressConsumer(AsyncJsonWebsocketConsumer):
 
         payload: dict = {"stage": stage, "percent": percent}
 
+        if last_log and last_log.kind == "error" and last_log.message:
+            payload["error"] = last_log.message
+
         if presentation.files:
             payload["files"] = presentation.files
             payload["file_urls"] = [
