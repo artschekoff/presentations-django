@@ -27,7 +27,13 @@
       "Bash(.venv/bin/python manage.py test presentations_app.tests.test_consumers --verbosity=2)",
       "Bash(.venv/bin/python manage.py test presentations_app.tests.test_consumers --verbosity=2 --keepdb)",
       "Bash(.venv/bin/python manage.py test presentations_app.tests.test_views.PresentationActiveViewErrorTest --verbosity=2 --keepdb)",
-      "Bash(.venv/bin/python manage.py test presentations_app --verbosity=2 --keepdb)"
+      "Bash(.venv/bin/python manage.py test presentations_app --verbosity=2 --keepdb)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(git push *)",
+      "mcp__serena__initial_instructions",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__find_symbol",
+      "mcp__serena__replace_symbol_body"
     ]
   },
   "enabledMcpjsonServers": [
