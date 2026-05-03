@@ -789,8 +789,10 @@
             actionsEl.className = "task-actions";
             actionsEl.textContent = "Generating…";
             row.appendChild(actionsEl);
+            error.textContent = "";
+            error.hidden = true;
             sockets.delete(task.id);
-            connectSocket(task.id, { row, status, progressFill, links, actions: actionsEl });
+            connectSocket(task.id, { row, status, error, progressFill, links, actions: actionsEl });
           } catch (err) {
             stopButtonLoading(restartBtn, { text: "↺ Restart", disabled: false, restoreText: false });
             alert(`Restart error: ${err.message}`);
