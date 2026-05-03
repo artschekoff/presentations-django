@@ -996,8 +996,29 @@
         return cells;
       }
 
+      function splitCsvRows(text) {
+        const rows = [];
+        let cur = "", inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+          const ch = text[i];
+          if (ch === '"') {
+            if (inQuotes && text[i + 1] === '"') { cur += '"'; i++; }
+            else inQuotes = !inQuotes;
+            cur += ch;
+          } else if ((ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) && !inQuotes) {
+            if (ch === "\r") i++;
+            if (cur.trim()) rows.push(cur);
+            cur = "";
+          } else {
+            cur += ch;
+          }
+        }
+        if (cur.trim()) rows.push(cur);
+        return rows;
+      }
+
       function parseCsv(text) {
-        const lines = text.split("\n").filter((l) => l.trim());
+        const lines = splitCsvRows(text);
         if (lines.length < 2) {
           return {
             errors: [{ row: "—", field: "—", message: "File is empty or contains headers only" }],
